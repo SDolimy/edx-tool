@@ -379,6 +379,7 @@ async function loadDataSafe(key,fallback){
   catch{return{value:fallback,existed:'unknown'};}
 }
 async function saveData(key,val){try{await window.storage.set(key,JSON.stringify(val),false);}catch(e){console.error(e);}}
+async function saveRaw(key,val){try{await window.storage.set(key,val,false);}catch(e){console.error(e);}}
 
 async function callClaude(system,userMsg){
   const res=await fetch("https://api.anthropic.com/v1/messages",{
@@ -866,8 +867,14 @@ function App(){
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px',flexWrap:'wrap',gap:'8px'}}>
             <p style={{fontWeight:'bold',color:'#374151',margin:0,fontSize:'13px'}}>دليل الترجمة (يُستخدم كقاعدة لكل الترجمات)</p>
             <div style={{display:'flex',gap:'8px'}}>
-              <button onClick={async()=>{await saveData('guideline',guideline);setSaveStatus('success');setTimeout(()=>setSaveStatus(null),2000);}} style={{...bp,fontSize:'12px',padding:'7px 14px',background:'#16a34a',border:'none'}}>
-                {saveStatus==='success'?'تم الحفظ':'احفظ'}
+              <button onClick={async()=>{
+                try{
+                  await window.storage.set('guideline',JSON.stringify(guideline),false);
+                  setSaveStatus('success');
+                }catch(e){setSaveStatus('error');}
+                setTimeout(()=>setSaveStatus(null),2000);
+              }} style={{...bp,fontSize:'12px',padding:'7px 14px',background:saveStatus==='success'?'#15803d':'#16a34a',border:'none'}}>
+                {saveStatus==='success'?'تم الحفظ':saveStatus==='error'?'خطأ':'احفظ'}
               </button>
               <button onClick={()=>setGuideline(DEFAULT_GUIDELINE)} style={{background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'7px 14px',fontWeight:'600',cursor:'pointer',color:'#374151',fontSize:'12px',fontFamily:'inherit'}}>↺ إعادة الافتراضي</button>
             </div>
