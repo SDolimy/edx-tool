@@ -198,6 +198,10 @@ const DEFAULT_GUIDELINE=`دليل ترجمة منصة أوبن إدكس - الن
 - أرسل (فعل ماض): بلا تشكيل
 - أرسِل (أمر): بكسرة واحدة
 - أُرسِل (مبني للمجهول): بضمة وكسرة
+- تنوين الفتح يُكتب على الألف لا على الحرف الذي قبلها. هذه قاعدة صارمة لا استثناء فيها.
+  الصواب: قسمًا، مساقًا، متعلمًا، حرفًا، موقعًا، مكوّنًا (التنوين دائمًا على الألف)
+  الخطأ: قسمًا، مساقًا، متعلمًا (التنوين على الحرف قبل الألف)
+  كذلك تنوين الضم والكسر: مساقٍ، مساقٌ — الحركة على الحرف الأخير مباشرة.
 
 ============================================
 12) القواعد (صحة الإعراب والهمزات)
@@ -376,10 +380,10 @@ async function loadDataSafe(key,fallback){
 }
 async function saveData(key,val){try{await window.storage.set(key,JSON.stringify(val),false);}catch(e){console.error(e);}}
 
-async function callClaude(system,userMsg,apiKey){
+async function callClaude(system,userMsg){
   const res=await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
-    headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
+    headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01"},
     body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system,messages:[{role:"user",content:userMsg}]})
   });
   const data=await res.json();
@@ -393,8 +397,6 @@ function App(){
   const[history,setHistory]=useState([]);
   const[loaded,setLoaded]=useState(false);
   const[tab,setTab]=useState("translate");
-  const[apiKey,setApiKey]=useState("");
-  const[showKey,setShowKey]=useState(false);
   // ترجمة فردية
   const[input,setInput]=useState("");
   const[contextInfo,setContextInfo]=useState("");
@@ -429,7 +431,6 @@ function App(){
 
   useEffect(()=>{
     (async()=>{
-      const sk=await loadDataSafe('api_key',"");
       const tx=await loadDataSafe('tx_token',"");
       const txp=await loadDataSafe('tx_project',"");
       const txr=await loadDataSafe('tx_resource',"");
@@ -438,7 +439,6 @@ function App(){
       const h=await loadDataSafe('history',[]);
       const csv=await loadDataSafe('csv_strings',[]);
       const ci=await loadDataSafe('csv_index',0);
-      if(sk.value)setApiKey(sk.value);
       if(tx.value)setTxToken(tx.value);
       if(txp.value)setTxProjectSlug(txp.value);
       if(txr.value)setTxResourceSlug(txr.value);
@@ -460,7 +460,6 @@ function App(){
   useEffect(()=>{if(loaded)saveData('guideline',guideline);},[guideline,loaded]);
   useEffect(()=>{if(loaded)saveData('examples',examples);},[examples,loaded]);
   useEffect(()=>{if(loaded)saveData('history',history);},[history,loaded]);
-  useEffect(()=>{if(loaded&&apiKey)saveData('api_key',apiKey);},[apiKey,loaded]);
   useEffect(()=>{if(loaded&&txToken)saveData('tx_token',txToken);},[txToken,loaded]);
   useEffect(()=>{if(loaded&&txProjectSlug)saveData('tx_project',txProjectSlug);},[txProjectSlug,loaded]);
   useEffect(()=>{if(loaded&&txResourceSlug)saveData('tx_resource',txResourceSlug);},[txResourceSlug,loaded]);
@@ -475,12 +474,11 @@ function App(){
 
   async function handleTranslate(){
     if(!input.trim()||loading)return;
-    if(!apiKey.trim()){setError("يرجى إدخال مفتاح Anthropic API أولاً");setShowKey(true);return;}
     setLoading(true);setError("");setTranslation("");setActiveStatus(null);setEditFeedback("");
     try{
       let p=`النص الإنجليزي:\n${input}`;
       if(contextInfo.trim())p+=`\n\nسياق إضافي:\n${contextInfo.trim()}`;
-      setTranslation((await callClaude(buildSystem(),p,apiKey)).trim());
+      setTranslation((await callClaude(buildSystem(),p)).trim());
     }catch(e){setError("خطأ: "+e.message);}finally{setLoading(false);}
   }
 
@@ -489,7 +487,7 @@ function App(){
     setLoading(true);setError("");
     try{
       const p=`النص الإنجليزي:\n${input}\n\nالترجمة السابقة المقترحة:\n${translation}\n\nملاحظات التعديل المطلوبة:\n${editFeedback}\n\nأعد ترجمة محسّنة تأخذ هذه الملاحظات في الحسبان مع الالتزام الكامل بالدليل. أعد فقط النص العربي النهائي.`;
-      setTranslation((await callClaude(buildSystem(),p,apiKey)).trim());
+      setTranslation((await callClaude(buildSystem(),p)).trim());
       setActiveStatus(null);
     }catch(e){setError("خطأ: "+e.message);}finally{setLoading(false);}
   }
@@ -521,9 +519,8 @@ function App(){
 
   async function handleCsvTranslate(){
     const cur=csvStrings[csvIndex];if(!cur||csvLoading)return;
-    if(!apiKey.trim()){setCsvError("يرجى إدخال مفتاح API أولاً");setShowKey(true);return;}
     setCsvLoading(true);setCsvError("");
-    try{setCsvTranslation((await callClaude(buildSystem(),`النص الإنجليزي:\n${cur.en}`,apiKey)).trim());}
+    try{setCsvTranslation((await callClaude(buildSystem(),`النص الإنجليزي:\n${cur.en}`)).trim());}
     catch(e){setCsvError("خطأ: "+e.message);}finally{setCsvLoading(false);}
   }
 
@@ -565,17 +562,16 @@ function App(){
       const strings=data.data.map(s=>({id:s.id,en:s.attributes.strings?.other||s.attributes.strings?.one||s.id,ar:"",done:false}));
       if(!strings.length){setTxError("لم يُعثَر على سلاسل نصية.");setTxLoading(false);return;}
       setTxStrings(strings);setTxIndex(0);setTxTranslation("");
-      setTxStatus(`✅ جُلبت ${strings.length} سلسلة نصية`);
+      setTxStatus(` جُلبت ${strings.length} سلسلة نصية`);
     }catch(e){setTxError("خطأ في Transifex: "+e.message);}finally{setTxLoading(false);}
   }
 
   async function txTranslateString(){
     const cur=txStrings[txIndex];if(!cur||txLoading)return;
-    if(!apiKey.trim()){setTxError("يرجى إدخال مفتاح Anthropic API أولاً");return;}
     setTxLoading(true);setTxError("");
     try{
-      const ar=(await callClaude(buildSystem(),`النص الإنجليزي:\n${cur.en}`,apiKey)).trim();
-      setTxTranslation(ar);setTxStatus("✅ تمت الترجمة — راجعها ثم اضغط رفع");
+      const ar=(await callClaude(buildSystem(),`النص الإنجليزي:\n${cur.en}`)).trim();
+      setTxTranslation(ar);setTxStatus(" تمت الترجمة — راجعها ثم اضغط رفع");
     }catch(e){setTxError("خطأ: "+e.message);}finally{setTxLoading(false);}
   }
 
@@ -593,7 +589,7 @@ function App(){
       const next=updated.findIndex((s,i)=>i>txIndex&&!s.done);
       const ni=next!==-1?next:txIndex+1<updated.length?txIndex+1:txIndex;
       setTxIndex(ni);setTxTranslation(updated[ni]?.ar||"");
-      setTxStatus(`✅ رُفعت! (${updated.filter(s=>s.done).length}/${updated.length})`);
+      setTxStatus(` رُفعت! (${updated.filter(s=>s.done).length}/${updated.length})`);
     }catch(e){setTxError("خطأ في الرفع: "+e.message);}finally{setTxLoading(false);}
   }
 
@@ -604,7 +600,7 @@ function App(){
 
   async function confirmSave(){
     setSaveStatus('saving');
-    try{await window.storage.set('examples',JSON.stringify(examples),false);setSaveStatus('success');setDebugInfo(`✅ ${examples.length} مثال محفوظ`);}
+    try{await window.storage.set('examples',JSON.stringify(examples),false);setSaveStatus('success');setDebugInfo(` ${examples.length} مثال محفوظ`);}
     catch{setSaveStatus('error');}
     setTimeout(()=>setSaveStatus(null),3000);
   }
@@ -617,7 +613,7 @@ function App(){
   function importExamplesFile(e){
     const file=e.target.files[0];if(!file)return;
     const reader=new FileReader();
-    reader.onload=evt=>{try{const d=JSON.parse(evt.target.result);if(Array.isArray(d)){const s=new Set(examples.map(x=>x.en.trim()));const toAdd=d.filter(x=>!s.has(x.en.trim()));setExamples(p=>[...p,...toAdd]);setDebugInfo(`✅ استُورد ${toAdd.length} مثال جديد`);}}catch{setDebugInfo("❌ خطأ في قراءة الملف");}};
+    reader.onload=evt=>{try{const d=JSON.parse(evt.target.result);if(Array.isArray(d)){const s=new Set(examples.map(x=>x.en.trim()));const toAdd=d.filter(x=>!s.has(x.en.trim()));setExamples(p=>[...p,...toAdd]);setDebugInfo(` استُورد ${toAdd.length} مثال جديد`);}}catch{setDebugInfo(" خطأ في قراءة الملف");}};
     reader.readAsText(file);e.target.value='';
   }
 
@@ -625,7 +621,7 @@ function App(){
     const s=new Set(examples.map(x=>x.en.trim()));
     const toAdd=DEFAULT_EXAMPLES.filter(e=>!s.has(e.en.trim()));
     setExamples(p=>[...p,...toAdd]);
-    setDebugInfo(`✅ أُضيف ${toAdd.length} مثال افتراضي جديد`);
+    setDebugInfo(` أُضيف ${toAdd.length} مثال افتراضي جديد`);
   }
 
   function removeHistory(idx){setHistory(history.filter((_,i)=>i!==idx));}
@@ -635,12 +631,12 @@ function App(){
   const bp={background:'linear-gradient(135deg,#4f46e5,#6366f1)',color:'white',border:'none',borderRadius:'12px',padding:'10px 20px',fontWeight:'bold',cursor:'pointer',fontSize:'14px',fontFamily:'inherit'};
 
   const tabs=[
-    {key:'translate',label:'✍️ الترجمة',count:null},
-    {key:'csv',label:'📄 CSV',count:csvStrings.length>0?`${csvStrings.filter(s=>s.done).length}/${csvStrings.length}`:null},
-    {key:'transifex',label:'🔗 Transifex',count:txStrings.length>0?`${txStrings.filter(s=>s.done).length}/${txStrings.length}`:null},
-    {key:'guideline',label:'📘 الدليل',count:null},
-    {key:'examples',label:'⭐ الأمثلة',count:examples.length},
-    {key:'history',label:'🗂️ السجل',count:history.length},
+    {key:'translate',label:' الترجمة',count:null},
+    {key:'csv',label:' CSV',count:csvStrings.length>0?`${csvStrings.filter(s=>s.done).length}/${csvStrings.length}`:null},
+    {key:'transifex',label:' Transifex',count:txStrings.length>0?`${txStrings.filter(s=>s.done).length}/${txStrings.length}`:null},
+    {key:'guideline',label:' الدليل',count:null},
+    {key:'examples',label:' الأمثلة',count:examples.length},
+    {key:'history',label:' السجل',count:history.length},
   ];
 
   return(
@@ -650,26 +646,14 @@ function App(){
       <div style={{...cs,padding:'20px',marginBottom:'14px'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'8px'}}>
           <div>
-            <h1 style={{margin:0,fontSize:'22px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',fontWeight:'bold'}}>🌐 أداة ترجمة أوبن إدكس (إنجليزي ↔ عربي)</h1>
+            <h1 style={{margin:0,fontSize:'22px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',fontWeight:'bold'}}> أداة ترجمة أوبن إدكس (إنجليزي ↔ عربي)</h1>
             <p style={{color:'#64748b',fontSize:'13px',margin:'4px 0 0'}}>مبنية على دليل أسلوب أوبن إدكس الكامل | {examples.length} مثال مرجعي معتمد</p>
           </div>
           <div style={{display:'flex',alignItems:'center',gap:'6px',background:'#f0fdf4',border:'2px solid #bbf7d0',borderRadius:'10px',padding:'6px 12px'}}>
             <span style={{width:'8px',height:'8px',borderRadius:'50%',background:'#16a34a',display:'inline-block'}}></span>
-            <span style={{fontSize:'12px',color:'#15803d',fontWeight:'600'}}>محفوظ على السحابة ☁️</span>
+            <span style={{fontSize:'12px',color:'#15803d',fontWeight:'600'}}>محفوظ على السحابة </span>
           </div>
         </div>
-      </div>
-
-      {/* API Key */}
-      <div style={{...cs,padding:'14px',marginBottom:'14px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
-          <span style={{fontSize:'13px',fontWeight:'bold',color:'#374151'}}>🔑 Anthropic API Key:</span>
-          {showKey
-            ?<input type="text" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-ant-..." style={{flex:1,padding:'8px 12px',borderRadius:'10px',border:'2px solid #e2e8f0',fontSize:'13px',minWidth:'200px'}}/>
-            :<span style={{fontSize:'13px',color:apiKey?'#16a34a':'#ef4444',fontWeight:'600'}}>{apiKey?'✅ مفتاح موجود':'⚠️ لم يُدخل بعد'}</span>}
-          <button onClick={()=>setShowKey(!showKey)} style={{...bp,padding:'7px 14px',fontSize:'12px'}}>{showKey?'إخفاء':'إدخال/تعديل'}</button>
-        </div>
-        <p style={{fontSize:'11px',color:'#94a3b8',margin:'6px 0 0'}}>احصل على المفتاح من console.anthropic.com — يُحفظ في متصفحك فقط.</p>
       </div>
 
       {/* Tabs */}
@@ -692,32 +676,25 @@ function App(){
               value={input} onChange={e=>setInput(e.target.value)}
               onKeyDown={e=>{if(e.altKey&&e.key==='Enter'){e.preventDefault();handleTranslate();}}}/>
             <details style={{margin:'8px 0'}}>
-              <summary style={{fontSize:'12px',color:'#64748b',cursor:'pointer'}}>＋ سياق إضافي (اختياري)</summary>
+              <summary style={{fontSize:'12px',color:'#64748b',cursor:'pointer'}}> سياق إضافي (اختياري)</summary>
               <textarea className="ltr-content" style={{width:'100%',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'10px',minHeight:'55px',fontSize:'12px',marginTop:'6px',boxSizing:'border-box'}}
                 placeholder="e.g. Key: course.preview.button — or context about where this string appears"
                 value={contextInfo} onChange={e=>setContextInfo(e.target.value)}/>
             </details>
-            <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+            <div style={{display:'flex',gap:'8px'}}>
               <button onClick={handleTranslate} disabled={loading||!input.trim()} style={{...bp,flex:1,opacity:(loading||!input.trim())?0.5:1}}>
-                {loading?'⏳ جارٍ الترجمة...':'✨ ترجم بـ API'}
-              </button>
-              <button onClick={()=>{
-                if(!input.trim())return;
-                const prompt=`ترجم النص التالي إلى العربية وفق دليل أوبن إدكس (صيغة الأمر للأزرار، المصطلحات الموحدة، حافظ على المتغيرات):\n\n${input}`;
-                window.open('https://claude.ai/new?q='+encodeURIComponent(prompt),'_blank');
-              }} disabled={!input.trim()} style={{background:'linear-gradient(135deg,#7c3aed,#a855f7)',color:'white',border:'none',borderRadius:'12px',padding:'10px 16px',fontWeight:'bold',cursor:'pointer',fontSize:'13px',fontFamily:'inherit',opacity:!input.trim()?0.5:1}}>
-                🤖 ترجم عبر Claude
+                {loading?'جار الترجمة...':'ترجم'}
               </button>
               <button onClick={startNew} style={{background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'12px',padding:'10px 16px',fontWeight:'600',cursor:'pointer',color:'#374151',fontFamily:'inherit',fontSize:'13px'}}>نص جديد</button>
             </div>
             {error&&<p style={{color:'#ef4444',fontSize:'12px',background:'#fef2f2',borderRadius:'10px',padding:'10px',marginTop:'8px'}}>{error}</p>}
-            <p style={{fontSize:'11px',color:'#94a3b8',margin:'8px 0 0'}}>زر "ترجم عبر Claude" يفتح claude.ai مع النص جاهزاً — انسخ الترجمة والصقها يدوياً</p>
+            <p style={{fontSize:'11px',color:'#94a3b8',margin:'8px 0 0'}}>Alt+Enter للترجمة السريعة | الأمثلة المستخدمة: {examples.length}</p>
           </div>
 
           <div style={{...cs,padding:'20px'}}>
             <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 8px',fontSize:'13px'}}>الترجمة العربية المقترحة</p>
             <div style={{border:'2px solid #f1f5f9',background:'#f8fafc',borderRadius:'14px',padding:'12px',minHeight:'140px'}}>
-              {loading?<span style={{color:'#94a3b8',fontSize:'13px'}}>⏳ جاري التوليد...</span>
+              {loading?<span style={{color:'#94a3b8',fontSize:'13px'}}> جاري التوليد...</span>
                :translation?<textarea className="rtl-content" dir="rtl" style={{width:'100%',background:'transparent',border:'none',outline:'none',resize:'none',minHeight:'120px',fontSize:'18px',color:'#1e293b',lineHeight:'1.8'}}
                   value={translation} onChange={e=>setTranslation(e.target.value)}/>
                :<span style={{color:'#94a3b8',fontSize:'13px'}}>ستظهر الترجمة هنا بعد الضغط على "ترجم"</span>}
@@ -728,11 +705,11 @@ function App(){
                 <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 8px',fontSize:'13px'}}>هل هذه الترجمة صحيحة بنسبة 100%؟</p>
                 <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginBottom:'8px'}}>
                   <button onClick={()=>confirmStatus('perfect')} style={{...bp,background:activeStatus==='perfect'?'#15803d':'#16a34a',border:`2px solid ${activeStatus==='perfect'?'#15803d':'#16a34a'}`,fontSize:'13px',padding:'8px 16px'}}>
-                    ✅ صحيحة 100% — اعتمدها كمثال مرجعي
+                     صحيحة 100% — اعتمدها كمثال مرجعي
                   </button>
                   <button onClick={()=>setActiveStatus(activeStatus==='needs_edit'?null:'needs_edit')} style={{padding:'8px 16px',borderRadius:'12px',fontSize:'13px',fontWeight:'bold',cursor:'pointer',fontFamily:'inherit',border:'2px solid #fbbf24',
                     color:activeStatus==='needs_edit'?'#fff':'#b45309',background:activeStatus==='needs_edit'?'#f59e0b':'#fffbeb'}}>
-                    ✏️ تحتاج تعديل
+                     تحتاج تعديل
                   </button>
                 </div>
 
@@ -744,7 +721,7 @@ function App(){
                       value={editFeedback} onChange={e=>setEditFeedback(e.target.value)}/>
                     <div style={{display:'flex',gap:'8px',marginTop:'8px',flexWrap:'wrap'}}>
                       <button onClick={handleRetranslate} disabled={loading||!editFeedback.trim()} style={{...bp,background:'#f59e0b',fontSize:'13px',padding:'8px 16px',opacity:(loading||!editFeedback.trim())?0.5:1}}>
-                        {loading?'⏳':'↺ أعد الترجمة بالملاحظات'}
+                        {loading?'':'↺ أعد الترجمة بالملاحظات'}
                       </button>
                       <button onClick={()=>confirmStatus('needs_edit')} style={{background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'8px 14px',fontWeight:'600',cursor:'pointer',color:'#374151',fontFamily:'inherit',fontSize:'13px'}}>
                         سجِّل الملاحظة في السجل فقط
@@ -755,7 +732,7 @@ function App(){
 
                 {activeStatus==='perfect'&&(
                   <div style={{background:'#f0fdf4',border:'2px solid #bbf7d0',borderRadius:'12px',padding:'10px',fontSize:'13px',color:'#15803d'}}>
-                    ✅ تم اعتماد هذه الترجمة وإضافتها كمثال مرجعي لتحسين الترجمات القادمة.
+                     تم اعتماد هذه الترجمة وإضافتها كمثال مرجعي لتحسين الترجمات القادمة.
                   </div>
                 )}
               </div>
@@ -769,45 +746,45 @@ function App(){
       {tab==='csv'&&(
         <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
           <div style={{...cs,padding:'18px',display:'flex',flexWrap:'wrap',gap:'10px',alignItems:'center'}}>
-            <label style={{...bp,display:'inline-block',cursor:'pointer'}}>📂 رفع ملف CSV<input type="file" accept=".csv" onChange={handleCsvUpload} style={{display:'none'}}/></label>
+            <label style={{...bp,display:'inline-block',cursor:'pointer'}}> رفع ملف CSV<input type="file" accept=".csv" onChange={handleCsvUpload} style={{display:'none'}}/></label>
             {csvStrings.length>0&&<>
-              <button onClick={exportCsvResults} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'8px 16px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'13px',fontFamily:'inherit'}}>⬇️ تصدير النتائج</button>
-              <button onClick={resetCsv} style={{background:'#fef2f2',border:'2px solid #fecaca',borderRadius:'10px',padding:'8px 16px',color:'#dc2626',fontWeight:'600',cursor:'pointer',fontSize:'13px',fontFamily:'inherit'}}>🗑️ مسح والبدء من جديد</button>
+              <button onClick={exportCsvResults} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'8px 16px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'13px',fontFamily:'inherit'}}> تصدير النتائج</button>
+              <button onClick={resetCsv} style={{background:'#fef2f2',border:'2px solid #fecaca',borderRadius:'10px',padding:'8px 16px',color:'#dc2626',fontWeight:'600',cursor:'pointer',fontSize:'13px',fontFamily:'inherit'}}> مسح والبدء من جديد</button>
             </>}
             {csvError&&<p style={{color:'#ef4444',fontSize:'13px',width:'100%',margin:0}}>{csvError}</p>}
           </div>
           {csvStrings.length===0
-            ?<div style={{...cs,padding:'60px',textAlign:'center',color:'#94a3b8'}}><div style={{fontSize:'48px'}}>📄</div><p style={{margin:'8px 0 0',fontSize:'13px'}}>ارفع ملف CSV يحتوي على سلاسل نصية إنجليزية</p></div>
+            ?<div style={{...cs,padding:'60px',textAlign:'center',color:'#94a3b8'}}><div style={{fontSize:'48px'}}></div><p style={{margin:'8px 0 0',fontSize:'13px'}}>ارفع ملف CSV يحتوي على سلاسل نصية إنجليزية</p></div>
             :<div className="mobile-grid-1" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'14px'}}>
               <div style={{...cs,padding:'20px'}}>
                 <div style={{marginBottom:'12px'}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#64748b',marginBottom:'6px'}}>
                     <span>السلسلة {csvIndex+1} من {csvStrings.length}</span>
-                    <span>{csvStrings.filter(s=>s.done).length} ✅ | {csvStrings.filter(s=>!s.done).length} متبقية</span>
+                    <span>{csvStrings.filter(s=>s.done).length}  | {csvStrings.filter(s=>!s.done).length} متبقية</span>
                   </div>
                   <div style={{background:'#e2e8f0',borderRadius:'99px',height:'8px'}}>
                     <div style={{height:'8px',borderRadius:'99px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',width:`${(csvStrings.filter(s=>s.done).length/csvStrings.length)*100}%`,transition:'width 0.5s'}}/>
                   </div>
                 </div>
-                <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 6px',fontSize:'13px'}}>النص الإنجليزي {csvStrings[csvIndex]?.done&&<span style={{background:'#dcfce7',color:'#16a34a',borderRadius:'99px',padding:'2px 8px',fontSize:'11px'}}>✅</span>}</p>
+                <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 6px',fontSize:'13px'}}>النص الإنجليزي {csvStrings[csvIndex]?.done&&<span style={{background:'#dcfce7',color:'#16a34a',borderRadius:'99px',padding:'2px 8px',fontSize:'11px'}}></span>}</p>
                 <div className="ltr-content" style={{border:'2px solid #f1f5f9',background:'#f8fafc',borderRadius:'12px',padding:'12px',minHeight:'80px',fontSize:'13px',color:'#1e293b'}}>{csvStrings[csvIndex]?.en}</div>
                 <div style={{display:'flex',gap:'8px',marginTop:'10px'}}>
-                  <button onClick={()=>handleCsvNav(-1)} disabled={csvIndex===0} style={{flex:1,background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'9px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:csvIndex===0?0.4:1}}>◀ السابق</button>
-                  <button onClick={handleCsvTranslate} disabled={csvLoading} style={{...bp,flex:1,opacity:csvLoading?0.5:1}}>{csvLoading?'⏳':'✨ ترجم'}</button>
-                  <button onClick={()=>handleCsvNav(1)} disabled={csvIndex===csvStrings.length-1} style={{flex:1,background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'9px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:csvIndex===csvStrings.length-1?0.4:1}}>القادم ▶</button>
+                  <button onClick={()=>handleCsvNav(-1)} disabled={csvIndex===0} style={{flex:1,background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'9px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:csvIndex===0?0.4:1}}> السابق</button>
+                  <button onClick={handleCsvTranslate} disabled={csvLoading} style={{...bp,flex:1,opacity:csvLoading?0.5:1}}>{csvLoading?'':' ترجم'}</button>
+                  <button onClick={()=>handleCsvNav(1)} disabled={csvIndex===csvStrings.length-1} style={{flex:1,background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'9px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:csvIndex===csvStrings.length-1?0.4:1}}>القادم </button>
                 </div>
               </div>
               <div style={{...cs,padding:'20px'}}>
                 <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 8px',fontSize:'13px'}}>الترجمة العربية</p>
                 <div style={{border:'2px solid #f1f5f9',background:'#f8fafc',borderRadius:'12px',padding:'12px',minHeight:'100px'}}>
-                  {csvLoading?<span style={{color:'#94a3b8',fontSize:'13px'}}>⏳ جاري التوليد...</span>
+                  {csvLoading?<span style={{color:'#94a3b8',fontSize:'13px'}}> جاري التوليد...</span>
                    :<textarea className="rtl-content" dir="rtl" style={{width:'100%',background:'transparent',border:'none',outline:'none',resize:'none',minHeight:'80px',fontSize:'17px',color:'#1e293b'}}
                       value={csvTranslation} onChange={e=>setCsvTranslation(e.target.value)}
                       onKeyDown={e=>{if(e.altKey&&e.key==='Enter'){e.preventDefault();handleCsvTranslate();}}}
                       placeholder="Alt+Enter للترجمة السريعة"/>}
                 </div>
                 {csvTranslation&&!csvLoading&&(
-                  <button onClick={handleCsvApprove} style={{...bp,width:'100%',marginTop:'10px',background:'#16a34a',border:'2px solid #16a34a',fontSize:'13px',borderRadius:'12px'}}>✅ اعتمدها وانتقل للقادم</button>
+                  <button onClick={handleCsvApprove} style={{...bp,width:'100%',marginTop:'10px',background:'#16a34a',border:'2px solid #16a34a',fontSize:'13px',borderRadius:'12px'}}> اعتمدها وانتقل للقادم</button>
                 )}
               </div>
             </div>}
@@ -818,13 +795,13 @@ function App(){
       {tab==='transifex'&&(
         <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
           <div style={{...cs,padding:'20px'}}>
-            <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 12px',fontSize:'13px'}}>🔗 إعدادات Transifex</p>
+            <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 12px',fontSize:'13px'}}> إعدادات Transifex</p>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:'10px',marginBottom:'12px'}}>
               <div>
                 <label style={{fontSize:'12px',color:'#64748b',display:'block',marginBottom:'4px'}}>API Token</label>
                 <div style={{display:'flex',gap:'6px'}}>
                   <input type={showTxToken?'text':'password'} value={txToken} onChange={e=>setTxToken(e.target.value)} placeholder="1/xxxxxxxxxxxxxxxx" style={{flex:1,padding:'8px 10px',borderRadius:'10px',border:'2px solid #e2e8f0',fontSize:'13px'}}/>
-                  <button onClick={()=>setShowTxToken(!showTxToken)} style={{...bp,padding:'8px 10px',fontSize:'12px'}}>{showTxToken?'🙈':'👁'}</button>
+                  <button onClick={()=>setShowTxToken(!showTxToken)} style={{...bp,padding:'8px 10px',fontSize:'12px'}}>{showTxToken?'':''}</button>
                 </div>
               </div>
               <div>
@@ -837,7 +814,7 @@ function App(){
               </div>
             </div>
             <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
-              <button onClick={txFetchStrings} disabled={txLoading} style={{...bp,opacity:txLoading?0.5:1}}>{txLoading?'⏳ جارٍ...':'📥 جلب السلاسل النصية'}</button>
+              <button onClick={txFetchStrings} disabled={txLoading} style={{...bp,opacity:txLoading?0.5:1}}>{txLoading?' جارٍ...':' جلب السلاسل النصية'}</button>
               {txStatus&&<span style={{fontSize:'13px',color:'#16a34a',fontWeight:'600'}}>{txStatus}</span>}
             </div>
             {txError&&<p style={{color:'#ef4444',fontSize:'12px',background:'#fef2f2',borderRadius:'10px',padding:'10px',marginTop:'8px'}}>{txError}</p>}
@@ -849,32 +826,32 @@ function App(){
                 <div style={{marginBottom:'12px'}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#64748b',marginBottom:'6px'}}>
                     <span>السلسلة {txIndex+1} من {txStrings.length}</span>
-                    <span>{txStrings.filter(s=>s.done).length} ✅ | {txStrings.filter(s=>!s.done).length} متبقية</span>
+                    <span>{txStrings.filter(s=>s.done).length}  | {txStrings.filter(s=>!s.done).length} متبقية</span>
                   </div>
                   <div style={{background:'#e2e8f0',borderRadius:'99px',height:'8px'}}>
                     <div style={{height:'8px',borderRadius:'99px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',width:`${(txStrings.filter(s=>s.done).length/txStrings.length)*100}%`,transition:'width 0.5s'}}/>
                   </div>
                 </div>
-                <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 4px',fontSize:'13px'}}>النص الإنجليزي {txStrings[txIndex]?.done&&<span style={{background:'#dcfce7',color:'#16a34a',borderRadius:'99px',padding:'2px 8px',fontSize:'11px'}}>✅</span>}</p>
+                <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 4px',fontSize:'13px'}}>النص الإنجليزي {txStrings[txIndex]?.done&&<span style={{background:'#dcfce7',color:'#16a34a',borderRadius:'99px',padding:'2px 8px',fontSize:'11px'}}></span>}</p>
                 <p style={{fontSize:'10px',color:'#94a3b8',margin:'0 0 6px',direction:'ltr',textAlign:'left'}}>{txStrings[txIndex]?.id}</p>
                 <div className="ltr-content" style={{border:'2px solid #f1f5f9',background:'#f8fafc',borderRadius:'12px',padding:'12px',minHeight:'80px',fontSize:'13px',color:'#1e293b'}}>{txStrings[txIndex]?.en}</div>
                 <div style={{display:'flex',gap:'8px',marginTop:'10px'}}>
-                  <button onClick={()=>{if(txIndex>0){setTxIndex(txIndex-1);setTxTranslation(txStrings[txIndex-1]?.ar||"");}}} disabled={txIndex===0} style={{flex:1,background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'9px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:txIndex===0?0.4:1}}>◀</button>
-                  <button onClick={txTranslateString} disabled={txLoading} style={{...bp,flex:2,opacity:txLoading?0.5:1}}>{txLoading?'⏳':'✨ ترجم'}</button>
-                  <button onClick={()=>{if(txIndex<txStrings.length-1){setTxIndex(txIndex+1);setTxTranslation(txStrings[txIndex+1]?.ar||"");}}} disabled={txIndex===txStrings.length-1} style={{flex:1,background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'9px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:txIndex===txStrings.length-1?0.4:1}}>▶</button>
+                  <button onClick={()=>{if(txIndex>0){setTxIndex(txIndex-1);setTxTranslation(txStrings[txIndex-1]?.ar||"");}}} disabled={txIndex===0} style={{flex:1,background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'9px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:txIndex===0?0.4:1}}></button>
+                  <button onClick={txTranslateString} disabled={txLoading} style={{...bp,flex:2,opacity:txLoading?0.5:1}}>{txLoading?'':' ترجم'}</button>
+                  <button onClick={()=>{if(txIndex<txStrings.length-1){setTxIndex(txIndex+1);setTxTranslation(txStrings[txIndex+1]?.ar||"");}}} disabled={txIndex===txStrings.length-1} style={{flex:1,background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'9px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:txIndex===txStrings.length-1?0.4:1}}></button>
                 </div>
               </div>
               <div style={{...cs,padding:'20px'}}>
                 <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 8px',fontSize:'13px'}}>الترجمة العربية</p>
                 <div style={{border:'2px solid #f1f5f9',background:'#f8fafc',borderRadius:'12px',padding:'12px',minHeight:'100px'}}>
-                  {txLoading?<span style={{color:'#94a3b8',fontSize:'13px'}}>⏳ جاري التوليد...</span>
+                  {txLoading?<span style={{color:'#94a3b8',fontSize:'13px'}}> جاري التوليد...</span>
                    :<textarea className="rtl-content" dir="rtl" style={{width:'100%',background:'transparent',border:'none',outline:'none',resize:'none',minHeight:'80px',fontSize:'17px',color:'#1e293b'}}
                       value={txTranslation} onChange={e=>setTxTranslation(e.target.value)}
                       placeholder="ستظهر الترجمة هنا — يمكنك تعديلها قبل الرفع"/>}
                 </div>
                 {txTranslation&&!txLoading&&(
                   <button onClick={txPushTranslation} style={{...bp,width:'100%',marginTop:'10px',background:'#0369a1',border:'2px solid #0369a1',fontSize:'13px',borderRadius:'12px'}}>
-                    🔗 ارفع إلى Transifex
+                     ارفع إلى Transifex
                   </button>
                 )}
               </div>
@@ -887,11 +864,15 @@ function App(){
       {tab==='guideline'&&(
         <div style={{...cs,padding:'20px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px',flexWrap:'wrap',gap:'8px'}}>
-            <p style={{fontWeight:'bold',color:'#374151',margin:0,fontSize:'13px'}}>📘 دليل الترجمة (يُستخدم كقاعدة لكل الترجمات)</p>
-            <button onClick={()=>setGuideline(DEFAULT_GUIDELINE)} style={{background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'7px 14px',fontWeight:'600',cursor:'pointer',color:'#374151',fontSize:'12px',fontFamily:'inherit'}}>↺ إعادة الدليل الافتراضي</button>
+            <p style={{fontWeight:'bold',color:'#374151',margin:0,fontSize:'13px'}}>دليل الترجمة (يُستخدم كقاعدة لكل الترجمات)</p>
+            <div style={{display:'flex',gap:'8px'}}>
+              <button onClick={async()=>{await saveData('guideline',guideline);setSaveStatus('success');setTimeout(()=>setSaveStatus(null),2000);}} style={{...bp,fontSize:'12px',padding:'7px 14px',background:'#16a34a',border:'none'}}>
+                {saveStatus==='success'?'تم الحفظ':'احفظ'}
+              </button>
+              <button onClick={()=>setGuideline(DEFAULT_GUIDELINE)} style={{background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'7px 14px',fontWeight:'600',cursor:'pointer',color:'#374151',fontSize:'12px',fontFamily:'inherit'}}>↺ إعادة الافتراضي</button>
+            </div>
           </div>
           <textarea className="rtl-content" dir="rtl" style={{width:'100%',border:'2px solid #e2e8f0',borderRadius:'14px',padding:'16px',minHeight:'500px',fontSize:'12px',lineHeight:'1.8',fontFamily:'monospace',boxSizing:'border-box'}} value={guideline} onChange={e=>setGuideline(e.target.value)}/>
-          <p style={{fontSize:'11px',color:'#94a3b8',margin:'6px 0 0'}}>يتم حفظ هذا الدليل تلقائيًا وإرساله مع كل طلب ترجمة.</p>
         </div>
       )}
 
@@ -904,20 +885,20 @@ function App(){
               <textarea className="ltr-content" style={{border:'2px solid #e2e8f0',borderRadius:'10px',padding:'8px',fontSize:'13px',minHeight:'60px',boxSizing:'border-box'}} placeholder="English text" value={newExEn} onChange={e=>setNewExEn(e.target.value)}/>
               <textarea className="rtl-content" dir="rtl" style={{border:'2px solid #e2e8f0',borderRadius:'10px',padding:'8px',fontSize:'14px',minHeight:'60px',boxSizing:'border-box'}} placeholder="الترجمة العربية" value={newExAr} onChange={e=>setNewExAr(e.target.value)}/>
             </div>
-            <button onClick={addExample} disabled={!newExEn.trim()||!newExAr.trim()} style={{...bp,marginTop:'8px',fontSize:'13px',padding:'8px 18px',opacity:(!newExEn.trim()||!newExAr.trim())?0.4:1}}>＋ إضافة المثال</button>
+            <button onClick={addExample} disabled={!newExEn.trim()||!newExAr.trim()} style={{...bp,marginTop:'8px',fontSize:'13px',padding:'8px 18px',opacity:(!newExEn.trim()||!newExAr.trim())?0.4:1}}> إضافة المثال</button>
           </div>
 
           <div style={{borderTop:'2px solid #f1f5f9',paddingTop:'14px'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px',flexWrap:'wrap',gap:'8px'}}>
-              <p style={{fontWeight:'bold',color:'#374151',margin:0,fontSize:'13px'}}>⭐ الأمثلة المرجعية الحالية ({examples.length})</p>
+              <p style={{fontWeight:'bold',color:'#374151',margin:0,fontSize:'13px'}}> الأمثلة المرجعية الحالية ({examples.length})</p>
             </div>
             <div style={{display:'flex',flexWrap:'wrap',gap:'8px',marginBottom:'12px'}}>
               <button onClick={confirmSave} style={{...bp,fontSize:'12px',padding:'7px 14px',background:saveStatus==='success'?'#16a34a':saveStatus==='error'?'#dc2626':'#16a34a',border:'none'}}>
-                {saveStatus==='saving'?'⏳ جاري...':saveStatus==='success'?'✅ تم الحفظ!':saveStatus==='error'?'❌ خطأ':'💾 احفظ'}
+                {saveStatus==='saving'?' جاري...':saveStatus==='success'?' تم الحفظ!':saveStatus==='error'?' خطأ':' احفظ'}
               </button>
               <button onClick={restoreDefaultExamples} style={{background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'7px 14px',fontWeight:'600',cursor:'pointer',color:'#374151',fontSize:'12px',fontFamily:'inherit'}}>↺ استعادة الافتراضية</button>
-              <button onClick={exportExamples} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px',fontFamily:'inherit'}}>⬇️ تصدير نسخة احتياطية</button>
-              <label style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px'}}>⬆️ استيراد ملف<input type="file" accept=".json" onChange={importExamplesFile} style={{display:'none'}}/></label>
+              <button onClick={exportExamples} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px',fontFamily:'inherit'}}> تصدير نسخة احتياطية</button>
+              <label style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px'}}> استيراد ملف<input type="file" accept=".json" onChange={importExamplesFile} style={{display:'none'}}/></label>
             </div>
             {debugInfo&&<p style={{fontSize:'11px',color:'#94a3b8',background:'#f8fafc',borderRadius:'8px',padding:'6px 10px',fontFamily:'monospace',marginBottom:'10px'}}>{debugInfo}</p>}
             {examples.length===0?<p style={{fontSize:'13px',color:'#94a3b8'}}>لا توجد أمثلة. الترجمات التي تعتمدها كـ "صحيحة 100%" تُضاف هنا تلقائيًا.</p>
@@ -929,7 +910,7 @@ function App(){
                       <textarea className="ltr-content" style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:'8px',padding:'6px',fontSize:'12px',color:'#374151',background:'#f8fafc',resize:'none',boxSizing:'border-box'}} value={ex.en} onChange={e=>updateExample(idx,'en',e.target.value)} rows={Math.min(3,Math.max(1,Math.ceil((ex.en||"").length/65)))}/>
                       <textarea className="rtl-content" dir="rtl" style={{width:'100%',border:'1px solid #e0e7ff',borderRadius:'8px',padding:'6px',fontSize:'14px',color:'#1e293b',background:'#f5f3ff',fontWeight:'500',resize:'none',boxSizing:'border-box'}} value={ex.ar} onChange={e=>updateExample(idx,'ar',e.target.value)} rows={Math.min(3,Math.max(1,Math.ceil((ex.ar||"").length/65)))}/>
                     </div>
-                    <button onClick={()=>removeExample(idx)} style={{background:'none',border:'none',cursor:'pointer',color:'#f87171',fontSize:'16px',padding:'4px'}}>✕</button>
+                    <button onClick={()=>removeExample(idx)} style={{background:'none',border:'none',cursor:'pointer',color:'#f87171',fontSize:'16px',padding:'4px'}}></button>
                   </div>
                 ))}
               </div>}
@@ -941,8 +922,8 @@ function App(){
       {tab==='history'&&(
         <div style={{...cs,padding:'20px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
-            <p style={{fontWeight:'bold',color:'#374151',margin:0,fontSize:'13px'}}>🗂️ سجل الترجمات ({history.length})</p>
-            {history.length>0&&<button onClick={()=>{const blob=new Blob([JSON.stringify(history,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`history-${history.length}.json`;a.click();}} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px',fontFamily:'inherit'}}>⬇️ تصدير السجل</button>}
+            <p style={{fontWeight:'bold',color:'#374151',margin:0,fontSize:'13px'}}> سجل الترجمات ({history.length})</p>
+            {history.length>0&&<button onClick={()=>{const blob=new Blob([JSON.stringify(history,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`history-${history.length}.json`;a.click();}} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px',fontFamily:'inherit'}}> تصدير السجل</button>}
           </div>
           {history.length===0?<p style={{fontSize:'13px',color:'#94a3b8'}}>لا توجد ترجمات مسجلة بعد.</p>
            :<div style={{maxHeight:'600px',overflowY:'auto',display:'flex',flexDirection:'column',gap:'8px'}}>
@@ -951,7 +932,7 @@ function App(){
                   <div style={{display:'flex',justifyContent:'space-between',marginBottom:'6px',flexWrap:'wrap',gap:'6px'}}>
                     <span style={{borderRadius:'99px',padding:'3px 10px',fontSize:'11px',fontWeight:'700',
                       ...(item.status==='perfect'?{background:'#dcfce7',color:'#16a34a'}:{background:'#fef3c7',color:'#b45309'})}}>
-                      {item.status==='perfect'?'✅ صحيحة 100%':'✏️ تحتاج تعديل'}
+                      {item.status==='perfect'?' صحيحة 100%':' تحتاج تعديل'}
                     </span>
                     <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
                       {item.ts&&<span style={{fontSize:'10px',color:'#94a3b8'}}>{new Date(item.ts).toLocaleDateString('ar-IQ')}</span>}
