@@ -697,14 +697,21 @@ function App(){
                 placeholder="e.g. Key: course.preview.button — or context about where this string appears"
                 value={contextInfo} onChange={e=>setContextInfo(e.target.value)}/>
             </details>
-            <div style={{display:'flex',gap:'8px'}}>
+            <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
               <button onClick={handleTranslate} disabled={loading||!input.trim()} style={{...bp,flex:1,opacity:(loading||!input.trim())?0.5:1}}>
-                {loading?'⏳ جارٍ الترجمة...':'✨ ترجم'}
+                {loading?'⏳ جارٍ الترجمة...':'✨ ترجم بـ API'}
+              </button>
+              <button onClick={()=>{
+                if(!input.trim())return;
+                const prompt=`ترجم النص التالي إلى العربية وفق دليل أوبن إدكس (صيغة الأمر للأزرار، المصطلحات الموحدة، حافظ على المتغيرات):\n\n${input}`;
+                window.open('https://claude.ai/new?q='+encodeURIComponent(prompt),'_blank');
+              }} disabled={!input.trim()} style={{background:'linear-gradient(135deg,#7c3aed,#a855f7)',color:'white',border:'none',borderRadius:'12px',padding:'10px 16px',fontWeight:'bold',cursor:'pointer',fontSize:'13px',fontFamily:'inherit',opacity:!input.trim()?0.5:1}}>
+                🤖 ترجم عبر Claude
               </button>
               <button onClick={startNew} style={{background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'12px',padding:'10px 16px',fontWeight:'600',cursor:'pointer',color:'#374151',fontFamily:'inherit',fontSize:'13px'}}>نص جديد</button>
             </div>
             {error&&<p style={{color:'#ef4444',fontSize:'12px',background:'#fef2f2',borderRadius:'10px',padding:'10px',marginTop:'8px'}}>{error}</p>}
-            <p style={{fontSize:'11px',color:'#94a3b8',margin:'8px 0 0'}}>Alt+Enter للترجمة السريعة | الأمثلة المستخدمة: {examples.length}</p>
+            <p style={{fontSize:'11px',color:'#94a3b8',margin:'8px 0 0'}}>زر "ترجم عبر Claude" يفتح claude.ai مع النص جاهزاً — انسخ الترجمة والصقها يدوياً</p>
           </div>
 
           <div style={{...cs,padding:'20px'}}>
