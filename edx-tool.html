@@ -306,10 +306,10 @@ async function loadDataSafe(key,fallback){
 async function saveData(key,val){try{await window.storage.set(key,JSON.stringify(val),false);}catch(e){console.error(e);}}
 async function saveRaw(key,val){try{await window.storage.set(key,val,false);}catch(e){console.error(e);}}
 
-async function callClaude(system,userMsg){
+async function callClaude(system,userMsg,apiKey){
   const res=await fetch("https://api.anthropic.com/v1/messages",{
     method:"POST",
-    headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01"},
+    headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
     body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system,messages:[{role:"user",content:userMsg}]})
   });
   const data=await res.json();
@@ -323,6 +323,8 @@ function App(){
   const[history,setHistory]=useState([]);
   const[loaded,setLoaded]=useState(false);
   const[tab,setTab]=useState("translate");
+  const[apiKey,setApiKey]=useState("");
+  const[showKey,setShowKey]=useState(false);
   // ترجمة فردية
   const[input,setInput]=useState("");
   const[contextInfo,setContextInfo]=useState("");
@@ -360,6 +362,8 @@ function App(){
       const tx=await loadDataSafe('tx_token',"");
       const txp=await loadDataSafe('tx_project',"");
       const txr=await loadDataSafe('tx_resource',"");
+      const sk=await loadDataSafe('api_key',"");
+      if(sk.value)setApiKey(sk.value);
       const g=await loadDataSafe('guideline',DEFAULT_GUIDELINE);
       const ex=await loadDataSafe('examples',DEFAULT_EXAMPLES);
       const h=await loadDataSafe('history',[]);
@@ -384,6 +388,7 @@ function App(){
   },[]);
 
   useEffect(()=>{if(loaded)saveData('guideline',guideline);},[guideline,loaded]);
+  useEffect(()=>{if(loaded&&apiKey)saveData('api_key',apiKey);},[apiKey,loaded]);
   useEffect(()=>{if(loaded)saveData('examples',examples);},[examples,loaded]);
   useEffect(()=>{if(loaded)saveData('history',history);},[history,loaded]);
   useEffect(()=>{if(loaded&&txToken)saveData('tx_token',txToken);},[txToken,loaded]);
@@ -414,11 +419,12 @@ function App(){
     // بحث عن مطابق تام في الأمثلة
     const exact=examples.find(e=>e.en.trim().toLowerCase()===input.trim().toLowerCase());
     if(exact){setTranslation(exact.ar);setActiveStatus(null);setEditFeedback("");setError("");return;}
+    if(!apiKey.trim()){setError("يرجى إدخال مفتاح Anthropic API أولاً");setShowKey(true);return;}
     setLoading(true);setError("");setTranslation("");setActiveStatus(null);setEditFeedback("");
     try{
       let p=`النص الإنجليزي:\n${input}`;
       if(contextInfo.trim())p+=`\n\nسياق إضافي:\n${contextInfo.trim()}`;
-      setTranslation((await callClaude(buildSystem(p),p)).trim());
+      setTranslation((await callClaude(buildSystem(p),p,apiKey)).trim());
     }catch(e){setError("خطأ: "+e.message);}finally{setLoading(false);}
   }
 
@@ -427,7 +433,7 @@ function App(){
     setLoading(true);setError("");
     try{
       const p=`النص الإنجليزي:\n${input}\n\nالترجمة السابقة المقترحة:\n${translation}\n\nملاحظات التعديل المطلوبة:\n${editFeedback}\n\nأعد ترجمة محسّنة تأخذ هذه الملاحظات في الحسبان مع الالتزام الكامل بالدليل. أعد فقط النص العربي النهائي.`;
-      setTranslation((await callClaude(buildSystem(),p)).trim());
+      setTranslation((await callClaude(buildSystem(),p,apiKey)).trim());
       setActiveStatus(null);
     }catch(e){setError("خطأ: "+e.message);}finally{setLoading(false);}
   }
@@ -460,7 +466,7 @@ function App(){
   async function handleCsvTranslate(){
     const cur=csvStrings[csvIndex];if(!cur||csvLoading)return;
     setCsvLoading(true);setCsvError("");
-    try{setCsvTranslation((await callClaude(buildSystem(),`النص الإنجليزي:\n${cur.en}`)).trim());}
+    try{setCsvTranslation((await callClaude(buildSystem(),`النص الإنجليزي:\n${cur.en}`,apiKey)).trim());}
     catch(e){setCsvError("خطأ: "+e.message);}finally{setCsvLoading(false);}
   }
 
@@ -510,7 +516,7 @@ function App(){
     const cur=txStrings[txIndex];if(!cur||txLoading)return;
     setTxLoading(true);setTxError("");
     try{
-      const ar=(await callClaude(buildSystem(),`النص الإنجليزي:\n${cur.en}`)).trim();
+      const ar=(await callClaude(buildSystem(),`النص الإنجليزي:\n${cur.en}`,apiKey)).trim();
       setTxTranslation(ar);setTxStatus(" تمت الترجمة — راجعها ثم اضغط رفع");
     }catch(e){setTxError("خطأ: "+e.message);}finally{setTxLoading(false);}
   }
@@ -594,6 +600,18 @@ function App(){
             <span style={{fontSize:'12px',color:'#15803d',fontWeight:'600'}}>محفوظ على السحابة </span>
           </div>
         </div>
+      </div>
+
+      {/* API Key */}
+      <div style={{...cs,padding:'14px',marginBottom:'14px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
+          <span style={{fontSize:'13px',fontWeight:'bold',color:'#374151'}}>Anthropic API Key:</span>
+          {showKey
+            ?<input type="text" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-ant-..." style={{flex:1,padding:'8px 12px',borderRadius:'10px',border:'2px solid #e2e8f0',fontSize:'13px',minWidth:'200px'}}/>
+            :<span style={{fontSize:'13px',color:apiKey?'#16a34a':'#ef4444',fontWeight:'600'}}>{apiKey?'مفتاح موجود':'لم يُدخل بعد'}</span>}
+          <button onClick={()=>setShowKey(!showKey)} style={{...bp,padding:'7px 14px',fontSize:'12px'}}>{showKey?'إخفاء':'إدخال/تعديل'}</button>
+        </div>
+        <p style={{fontSize:'11px',color:'#94a3b8',margin:'6px 0 0'}}>يُحفظ في متصفحك فقط — لا يُرسل لأي جهة غير Anthropic.</p>
       </div>
 
       {/* Tabs */}
