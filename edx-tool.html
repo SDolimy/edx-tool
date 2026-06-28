@@ -9,10 +9,21 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 <style>
-  body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:linear-gradient(135deg,#eef2ff,#f8fafc,#f0f9ff);background-attachment:fixed;min-height:100vh;padding:16px;}
+  *{box-sizing:border-box;}
+  body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:linear-gradient(135deg,#eef2ff,#f8fafc,#f0f9ff);background-attachment:fixed;min-height:100vh;padding:12px;}
   .rtl-content{direction:rtl;} .ltr-content{direction:ltr;text-align:left;}
-  textarea{resize:vertical;font-family:inherit;}
+  textarea{resize:vertical;font-family:inherit;font-size:16px!important;}
+  input{font-size:16px!important;}
   .scrollbar-thin::-webkit-scrollbar{width:6px;} .scrollbar-thin::-webkit-scrollbar-thumb{background:#c7d2fe;border-radius:3px;}
+  @media(max-width:640px){
+    body{padding:8px;}
+    .mobile-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap!important;padding-bottom:4px;}
+    .mobile-tabs button{white-space:nowrap;flex-shrink:0;padding:8px 10px!important;font-size:11px!important;}
+    .mobile-grid-1{grid-template-columns:1fr!important;}
+    .mobile-p{padding:14px!important;}
+    .mobile-btn{padding:12px!important;font-size:14px!important;width:100%!important;}
+    h1{font-size:16px!important;}
+  }
 </style>
 </head>
 <body>
@@ -662,9 +673,9 @@ function App(){
       </div>
 
       {/* Tabs */}
-      <div style={{...cs,padding:'8px',marginBottom:'14px',display:'flex',flexWrap:'wrap',gap:'6px'}}>
+      <div className="mobile-tabs" style={{...cs,padding:'8px',marginBottom:'14px',display:'flex',flexWrap:'wrap',gap:'6px',overflowX:'auto'}}>
         {tabs.map(t=>(
-          <button key={t.key} onClick={()=>setTab(t.key)} style={{padding:'9px 15px',borderRadius:'10px',fontWeight:'600',fontSize:'13px',cursor:'pointer',border:'2px solid',transition:'all 0.2s',fontFamily:'inherit',
+          <button key={t.key} onClick={()=>setTab(t.key)} style={{padding:'9px 15px',borderRadius:'10px',fontWeight:'600',fontSize:'13px',cursor:'pointer',border:'2px solid',transition:'all 0.2s',fontFamily:'inherit',whiteSpace:'nowrap',
             ...(tab===t.key?{background:'linear-gradient(135deg,#4f46e5,#6366f1)',color:'white',borderColor:'#4f46e5'}:{background:'#f1f5f9',color:'#374151',borderColor:'#e2e8f0'})}}>
             {t.label}{t.count!==null?` (${t.count})`:''}
           </button>
@@ -673,7 +684,7 @@ function App(){
 
       {/* === الترجمة === */}
       {tab==='translate'&&(
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'14px'}}>
+        <div className="mobile-grid-1" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'14px'}}>
           <div style={{...cs,padding:'20px'}}>
             <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 8px',fontSize:'13px'}}>النص الإنجليزي</p>
             <textarea className="ltr-content" style={{width:'100%',border:'2px solid #e2e8f0',borderRadius:'14px',padding:'12px',minHeight:'140px',fontSize:'14px',color:'#1e293b',boxSizing:'border-box'}}
@@ -760,7 +771,7 @@ function App(){
           </div>
           {csvStrings.length===0
             ?<div style={{...cs,padding:'60px',textAlign:'center',color:'#94a3b8'}}><div style={{fontSize:'48px'}}>📄</div><p style={{margin:'8px 0 0',fontSize:'13px'}}>ارفع ملف CSV يحتوي على سلاسل نصية إنجليزية</p></div>
-            :<div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'14px'}}>
+            :<div className="mobile-grid-1" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'14px'}}>
               <div style={{...cs,padding:'20px'}}>
                 <div style={{marginBottom:'12px'}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#64748b',marginBottom:'6px'}}>
@@ -826,7 +837,7 @@ function App(){
             <p style={{fontSize:'11px',color:'#94a3b8',margin:'8px 0 0'}}>ملاحظة: يتطلب تشغيل الأداة عبر بروكسي يدعم CORS مع api.transifex.com</p>
           </div>
           {txStrings.length>0&&(
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'14px'}}>
+            <div className="mobile-grid-1" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'14px'}}>
               <div style={{...cs,padding:'20px'}}>
                 <div style={{marginBottom:'12px'}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#64748b',marginBottom:'6px'}}>
