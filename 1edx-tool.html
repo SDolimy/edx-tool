@@ -357,9 +357,6 @@ function App(){
   const[txResourceSlug,setTxResourceSlug]=useState("");
   const[txStrings,setTxStrings]=useState([]);
   const[txIndex,setTxIndex]=useState(0);
-  const[txMeta,setTxMeta]=useState(null); // {translator, datetime}
-  const[txSearch,setTxSearch]=useState("");
-  const[txMetaLoading,setTxMetaLoading]=useState(false);
   const[txTranslation,setTxTranslation]=useState("");
   const[txLoading,setTxLoading]=useState(false);
   const[txError,setTxError]=useState("");
@@ -424,9 +421,9 @@ function App(){
       const query=userMsg.toLowerCase();
       // المطابق تماماً
       const exact=examples.filter(e=>e.en.toLowerCase()===query.trim().replace(/^النص الإنجليزي:\n/,'').trim());
-      // المشابه بكلمات مشتركة (أولوية للجودة)
+      // المشابه بكلمات مشتركة
       const relevant=examples.filter(e=>!exact.includes(e)&&e.en.toLowerCase().split(' ').some(w=>w.length>4&&query.includes(w)));
-      // عينة متنوعة من الباقي لتغطية أوسع لأسلوب الدليل
+      // عينة متنوعة من الباقي (كل 9 أمثلة خذ واحداً)
       const others=examples.filter(e=>!exact.includes(e)&&!relevant.includes(e)).filter((_,i)=>i%9===0).slice(0,50);
       const selected=[...exact,...relevant,...others];
       selected.forEach(e=>{s+=`- "${e.en}" => "${e.ar}"\n`;});
@@ -522,52 +519,16 @@ function App(){
     try{
       const parts=txProjectSlug.split(':');
       const org=parts[0];const proj=parts[1]||parts[0];
-      let url=`https://rest.api.transifex.com/resource_strings?filter[resource]=o:${org}:p:${proj}:r:${txResourceSlug}&page[size]=150`;
-      let allData=[];
-      let page=1;
-      while(url){
-        const res=await fetch(url,{headers:{'Authorization':`Bearer ${txToken}`,'Content-Type':'application/vnd.api+json'}});
-        if(!res.ok){const err=await res.json();throw new Error(err.errors?.[0]?.detail||`HTTP ${res.status}`);}
-        const data=await res.json();
-        allData=allData.concat(data.data);
-        setTxStatus(`جارٍ الجلب... (${allData.length} حتى الآن)`);
-        const nextLink=data.links?.next;
-        url=nextLink?(nextLink.startsWith('http')?nextLink:`https://rest.api.transifex.com${nextLink}`):null;
-        page++;
-        if(page>50)break; // أمان من الحلقات اللانهائية
-      }
-      const strings=allData.map(s=>({id:s.id,en:s.attributes.strings?.other||s.attributes.strings?.one||s.id,ar:"",done:false}));
+      const url=`https://rest.api.transifex.com/resource_strings?filter[resource]=o:${org}:p:${proj}:r:${txResourceSlug}&limit=250`;
+      const res=await fetch(url,{headers:{'Authorization':`Bearer ${txToken}`,'Content-Type':'application/vnd.api+json'}});
+      if(!res.ok){const err=await res.json();throw new Error(err.errors?.[0]?.detail||`HTTP ${res.status}`);}
+      const data=await res.json();
+      const strings=data.data.map(s=>({id:s.id,en:s.attributes.strings?.other||s.attributes.strings?.one||s.id,ar:"",done:false}));
       if(!strings.length){setTxError("لم يُعثَر على سلاسل نصية.");setTxLoading(false);return;}
       setTxStrings(strings);setTxIndex(0);setTxTranslation("");
-      setTxStatus(`جُلبت ${strings.length} سلسلة نصية (كامل المصدر)`);
+      setTxStatus(` جُلبت ${strings.length} سلسلة نصية`);
     }catch(e){setTxError("خطأ في Transifex: "+e.message);}finally{setTxLoading(false);}
   }
-
-  async function txFetchMeta(stringId){
-    if(!txToken.trim())return;
-    setTxMetaLoading(true);setTxMeta(null);
-    try{
-      const translationId=`${stringId}:l:ar`;
-      const res=await fetch(`https://rest.api.transifex.com/resource_translations/${encodeURIComponent(translationId)}?include=translator`,{headers:{'Authorization':`Bearer ${txToken}`,'Content-Type':'application/vnd.api+json'}});
-      if(!res.ok){setTxMetaLoading(false);return;}
-      const data=await res.json();
-      const dt=data.data?.attributes?.datetime_translated;
-      const translatorRel=data.data?.relationships?.translator?.data;
-      let translatorName=translatorRel?.id?.replace('u:','')||null;
-      // محاولة الحصول على اسم العرض من included
-      if(data.included){
-        const u=data.included.find(i=>i.type==='users'&&i.id===translatorRel?.id);
-        if(u?.attributes?.username)translatorName=u.attributes.username;
-      }
-      setTxMeta({translator:translatorName,datetime:dt});
-    }catch{setTxMeta(null);}finally{setTxMetaLoading(false);}
-  }
-
-  useEffect(()=>{
-    if(txStrings.length>0&&txStrings[txIndex]&&txToken.trim()){
-      txFetchMeta(txStrings[txIndex].id);
-    }
-  },[txIndex,txStrings.length]);
 
   async function txTranslateString(){
     const cur=txStrings[txIndex];if(!cur||txLoading)return;
@@ -582,11 +543,9 @@ function App(){
     const cur=txStrings[txIndex];if(!txTranslation.trim()||!cur)return;
     setTxLoading(true);setTxError("");
     try{
-      // معرّف السلسلة بصيغة: o:org:p:project:r:resource:s:HASH
-      // معرّف الترجمة بصيغة: o:org:p:project:r:resource:s:HASH:l:ar
-      const translationId=`${cur.id}:l:ar`;
-      const payload={data:{type:"resource_translations",id:translationId,attributes:{strings:{other:txTranslation}}}};
-      const res=await fetch(`https://rest.api.transifex.com/resource_translations/${encodeURIComponent(translationId)}`,{method:"PATCH",headers:{'Authorization':`Bearer ${txToken}`,'Content-Type':'application/vnd.api+json'},body:JSON.stringify(payload)});
+      const parts=txProjectSlug.split(':');const org=parts[0];const proj=parts[1]||parts[0];
+      const payload={data:{type:"resource_translations",attributes:{strings:{other:txTranslation}},relationships:{language:{data:{type:"languages",id:"l:ar"}},resource:{data:{type:"resources",id:`o:${org}:p:${proj}:r:${txResourceSlug}`}}}}};
+      const res=await fetch("https://rest.api.transifex.com/resource_translations",{method:"POST",headers:{'Authorization':`Bearer ${txToken}`,'Content-Type':'application/vnd.api+json'},body:JSON.stringify(payload)});
       if(!res.ok){const err=await res.json();throw new Error(err.errors?.[0]?.detail||`HTTP ${res.status}`);}
       const updated=txStrings.map((s,i)=>i===txIndex?{...s,ar:txTranslation,done:true}:s);
       setTxStrings(updated);
@@ -853,14 +812,12 @@ function App(){
                     <span>{txStrings.filter(s=>s.done).length} مكتملة</span>
                     <span>{txStrings.length} الإجمالي</span>
                   </div>
-                  <div style={{background:'#e2e8f0',borderRadius:'99px',height:'6px',marginBottom:'10px'}}>
+                  <div style={{background:'#e2e8f0',borderRadius:'99px',height:'6px'}}>
                     <div style={{height:'6px',borderRadius:'99px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',width:`${(txStrings.filter(s=>s.done).length/txStrings.length)*100}%`,transition:'width 0.5s'}}/>
                   </div>
-                  <input type="text" value={txSearch} onChange={e=>setTxSearch(e.target.value)} placeholder="ابحث في السلاسل..." style={{width:'100%',padding:'7px 10px',borderRadius:'8px',border:'2px solid #e2e8f0',fontSize:'12px',boxSizing:'border-box'}}/>
-                  {txSearch.trim()&&<p style={{fontSize:'10px',color:'#94a3b8',margin:'6px 0 0'}}>{txStrings.filter(s=>s.en.toLowerCase().includes(txSearch.toLowerCase())).length} نتيجة</p>}
                 </div>
                 <div style={{overflowY:'auto',display:'flex',flexDirection:'column',gap:'4px'}}>
-                  {txStrings.filter(s=>!txSearch.trim()||s.en.toLowerCase().includes(txSearch.toLowerCase())).map((s)=>{const i=txStrings.indexOf(s);return(
+                  {txStrings.map((s,i)=>(
                     <button key={i} onClick={()=>{setTxIndex(i);setTxTranslation(s.ar||"");}} style={{
                       textAlign:'right',padding:'8px 10px',borderRadius:'10px',border:'2px solid',cursor:'pointer',fontFamily:'inherit',
                       background:i===txIndex?'#eef2ff':'transparent',
@@ -870,23 +827,14 @@ function App(){
                       <span style={{fontSize:'11px',color:s.done?'#16a34a':'#cbd5e1',fontWeight:'bold',minWidth:'14px'}}>{s.done?'✓':i+1}</span>
                       <span className="ltr-content" style={{fontSize:'11px',color:'#475569',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{s.en}</span>
                     </button>
-                  );})}
+                  ))}
                 </div>
               </div>
 
               {/* خانة الترجمة الرئيسية */}
               <div style={{...cs,padding:'24px'}}>
                 <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 4px',fontSize:'13px'}}>السلسلة {txIndex+1} من {txStrings.length} {txStrings[txIndex]?.done&&<span style={{background:'#dcfce7',color:'#16a34a',borderRadius:'99px',padding:'2px 8px',fontSize:'11px',marginRight:'6px'}}>مكتملة</span>}</p>
-                <p style={{fontSize:'10px',color:'#94a3b8',margin:'0 0 6px',direction:'ltr',textAlign:'left'}}>{txStrings[txIndex]?.id}</p>
-                {txMetaLoading
-                  ?<p style={{fontSize:'11px',color:'#94a3b8',margin:'0 0 10px'}}>جارٍ التحقق من سجل الترجمة...</p>
-                  :txMeta&&(txMeta.translator||txMeta.datetime)
-                    ?<p style={{fontSize:'11px',color:'#64748b',background:'#f8fafc',borderRadius:'8px',padding:'6px 10px',margin:'0 0 10px'}}>
-                        {txMeta.translator&&<span>آخر مترجم: <b>{txMeta.translator}</b></span>}
-                        {txMeta.translator&&txMeta.datetime&&<span> · </span>}
-                        {txMeta.datetime&&<span>{new Date(txMeta.datetime).toLocaleDateString('ar-IQ',{year:'numeric',month:'short',day:'numeric'})}</span>}
-                      </p>
-                    :<p style={{fontSize:'11px',color:'#94a3b8',margin:'0 0 10px'}}>لا توجد ترجمة سابقة مسجَّلة لهذه السلسلة</p>}
+                <p style={{fontSize:'10px',color:'#94a3b8',margin:'0 0 10px',direction:'ltr',textAlign:'left'}}>{txStrings[txIndex]?.id}</p>
 
                 <p style={{fontSize:'12px',color:'#64748b',margin:'0 0 6px'}}>النص الإنجليزي</p>
                 <div className="ltr-content" style={{border:'2px solid #f1f5f9',background:'#f8fafc',borderRadius:'12px',padding:'14px',minHeight:'70px',fontSize:'15px',color:'#1e293b',marginBottom:'16px'}}>{txStrings[txIndex]?.en}</div>
