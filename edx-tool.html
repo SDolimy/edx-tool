@@ -522,7 +522,7 @@ function App(){
     try{
       const parts=txProjectSlug.split(':');
       const org=parts[0];const proj=parts[1]||parts[0];
-      let url=`https://rest.api.transifex.com/resource_strings?filter[resource]=o:${org}:p:${proj}:r:${txResourceSlug}&page[size]=150`;
+      let url=`https://rest.api.transifex.com/resource_strings?filter[resource]=o:${org}:p:${proj}:r:${txResourceSlug}`;
       let allData=[];
       let page=1;
       while(url){
