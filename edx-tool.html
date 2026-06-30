@@ -23,6 +23,17 @@
     .mobile-p{padding:14px!important;}
     .mobile-btn{padding:12px!important;font-size:14px!important;width:100%!important;}
     h1{font-size:16px!important;}
+    .tx-sidebar{max-height:220px!important;}
+    .ex-list{max-height:350px!important;}
+    .header-row{flex-direction:column!important;align-items:flex-start!important;}
+    .header-status{align-self:flex-start;margin-top:8px;}
+    .btn-row{flex-direction:column!important;}
+    .btn-row>button,.btn-row>label{width:100%!important;}
+    .nav-row{flex-wrap:wrap!important;}
+    .nav-row>button{min-width:80px;}
+  }
+  @media(max-width:400px){
+    .mobile-tabs button{padding:7px 8px!important;font-size:10px!important;}
   }
 </style>
 </head>
@@ -322,6 +333,7 @@ function App(){
   const[examples,setExamples]=useState([]);
   const[history,setHistory]=useState([]);
   const[loaded,setLoaded]=useState(false);
+  const[cloudStatus,setCloudStatus]=useState('checking'); // checking | connected | error
   const[tab,setTab]=useState("translate");
   const[apiKey,setApiKey]=useState("");
   const[showKey,setShowKey]=useState(false);
@@ -352,6 +364,7 @@ function App(){
   const[showTxToken,setShowTxToken]=useState(false);
   // أمثلة
   const[newExEn,setNewExEn]=useState("");
+  const[exSearch,setExSearch]=useState("");
   const[newExAr,setNewExAr]=useState("");
   const[saveStatus,setSaveStatus]=useState(null);
   const[debugInfo,setDebugInfo]=useState("");
@@ -383,6 +396,11 @@ function App(){
       setHistory(h.value);
       if(csv.existed===true&&csv.value.length>0){setCsvStrings(csv.value);setCsvIndex(ci.value||0);setCsvTranslation(csv.value[ci.value||0]?.ar||"");}
       setDebugInfo(`الأمثلة: ${ex.existed===true?ex.value.length:DEFAULT_EXAMPLES.length} | التخزين: ${ex.existed===true?'موجود':'أول استخدام'}`);
+      // فحص فعلي لحالة الاتصال بـ Supabase
+      try{
+        const testRes=await fetch(`${SUPA_URL}/rest/v1/storage?select=key&limit=1`,{headers:SUPA_HEADERS});
+        setCloudStatus(testRes.ok?'connected':'error');
+      }catch{setCloudStatus('error');}
       setLoaded(true);
     })();
   },[]);
@@ -559,7 +577,7 @@ function App(){
   function importExamplesFile(e){
     const file=e.target.files[0];if(!file)return;
     const reader=new FileReader();
-    reader.onload=evt=>{try{const d=JSON.parse(evt.target.result);if(Array.isArray(d)){const s=new Set(examples.map(x=>x.en.trim()));const toAdd=d.filter(x=>!s.has(x.en.trim()));setExamples(p=>[...p,...toAdd]);setDebugInfo(` استُورد ${toAdd.length} مثال جديد`);}}catch{setDebugInfo(" خطأ في قراءة الملف");}};
+    reader.onload=evt=>{try{const d=JSON.parse(evt.target.result);if(Array.isArray(d)){const s=new Set(examples.map(x=>x.en.trim()));const now=Date.now();const toAdd=d.filter(x=>!s.has(x.en.trim())).map(x=>({...x,ts:x.ts||now}));setExamples(p=>[...p,...toAdd]);setDebugInfo(` استُورد ${toAdd.length} مثال جديد`);}}catch{setDebugInfo(" خطأ في قراءة الملف");}};
     reader.readAsText(file);e.target.value='';
   }
 
@@ -590,28 +608,35 @@ function App(){
 
       {/* Header */}
       <div style={{...cs,padding:'20px',marginBottom:'14px'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:'8px'}}>
-          <div>
-            <h1 style={{margin:0,fontSize:'22px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',fontWeight:'bold'}}> أداة ترجمة أوبن إدكس (إنجليزي ↔ عربي)</h1>
-            <p style={{color:'#64748b',fontSize:'13px',margin:'4px 0 0'}}>مبنية على دليل أسلوب أوبن إدكس الكامل | {examples.length} مثال مرجعي معتمد</p>
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:'6px',background:'#f0fdf4',border:'2px solid #bbf7d0',borderRadius:'10px',padding:'6px 12px'}}>
-            <span style={{width:'8px',height:'8px',borderRadius:'50%',background:'#16a34a',display:'inline-block'}}></span>
-            <span style={{fontSize:'12px',color:'#15803d',fontWeight:'600'}}>محفوظ على السحابة </span>
-          </div>
-        </div>
+        <h1 style={{margin:0,fontSize:'22px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',WebkitBackgroundClip:'text',WebkitTextFillColor:'transparent',fontWeight:'bold'}}> أداة ترجمة أوبن إدكس (إنجليزي ↔ عربي)</h1>
+        <p style={{color:'#64748b',fontSize:'13px',margin:'4px 0 0'}}>بُنيت الأداة على دليل ترجمة منصة أوبن إدكس، وبمساعدة الذكاء الاصطناعي الذي يستند إلى الترجمات السابقة المعتمدة داخل الأداة، لإنتاج ترجمات متسقة ودقيقة.</p>
       </div>
 
-      {/* API Key */}
-      <div style={{...cs,padding:'14px',marginBottom:'14px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
-          <span style={{fontSize:'13px',fontWeight:'bold',color:'#374151'}}>Anthropic API Key:</span>
-          {showKey
-            ?<input type="text" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-ant-..." style={{flex:1,padding:'8px 12px',borderRadius:'10px',border:'2px solid #e2e8f0',fontSize:'13px',minWidth:'200px'}}/>
-            :<span style={{fontSize:'13px',color:apiKey?'#16a34a':'#ef4444',fontWeight:'600'}}>{apiKey?'مفتاح موجود':'لم يُدخل بعد'}</span>}
-          <button onClick={()=>setShowKey(!showKey)} style={{...bp,padding:'7px 14px',fontSize:'12px'}}>{showKey?'إخفاء':'إدخال/تعديل'}</button>
+      {/* API Key + Cloud Status */}
+      <div style={{...cs,padding:0,marginBottom:'14px',display:'flex',overflow:'hidden'}} className="mobile-grid-1">
+        <div style={{flex:1,padding:'14px',borderLeft:'2px solid #f1f5f9',display:'flex',alignItems:'center'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'6px',
+            background:cloudStatus==='connected'?'#f0fdf4':cloudStatus==='error'?'#fef2f2':'#f8fafc',
+            border:`2px solid ${cloudStatus==='connected'?'#bbf7d0':cloudStatus==='error'?'#fecaca':'#e2e8f0'}`,
+            borderRadius:'10px',padding:'6px 12px'}}>
+            <span style={{width:'8px',height:'8px',borderRadius:'50%',display:'inline-block',
+              background:cloudStatus==='connected'?'#16a34a':cloudStatus==='error'?'#dc2626':'#94a3b8'}}></span>
+            <span style={{fontSize:'12px',fontWeight:'600',
+              color:cloudStatus==='connected'?'#15803d':cloudStatus==='error'?'#b91c1c':'#64748b'}}>
+              {cloudStatus==='connected'?'محفوظ على السحابة':cloudStatus==='error'?'تعذّر الاتصال بالسحابة':'جارٍ التحقق...'}
+            </span>
+          </div>
         </div>
-        <p style={{fontSize:'11px',color:'#94a3b8',margin:'6px 0 0'}}>يُحفظ في متصفحك فقط — لا يُرسل لأي جهة غير Anthropic.</p>
+        <div style={{flex:2,padding:'14px'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
+            <span style={{fontSize:'13px',fontWeight:'bold',color:'#374151'}}>Anthropic API Key:</span>
+            {showKey
+              ?<input type="text" value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="sk-ant-..." style={{flex:1,padding:'8px 12px',borderRadius:'10px',border:'2px solid #e2e8f0',fontSize:'13px',minWidth:'200px'}}/>
+              :<span style={{fontSize:'13px',color:apiKey?'#16a34a':'#ef4444',fontWeight:'600'}}>{apiKey?'المفتاح موجود':'لم يُدخل بعد'}</span>}
+            <button onClick={()=>setShowKey(!showKey)} style={{...bp,padding:'7px 14px',fontSize:'12px'}}>{showKey?'أخفِ':'اكتب المفتاح'}</button>
+          </div>
+          <p style={{fontSize:'11px',color:'#94a3b8',margin:'6px 0 0'}}>يُحفظ في متصفحك فقط — لا يُرسل لأي جهة غير Anthropic.</p>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -704,7 +729,7 @@ function App(){
       {tab==='csv'&&(
         <div style={{display:'flex',flexDirection:'column',gap:'14px'}}>
           <div style={{...cs,padding:'18px',display:'flex',flexWrap:'wrap',gap:'10px',alignItems:'center'}}>
-            <label style={{...bp,display:'inline-block',cursor:'pointer'}}> رفع ملف CSV<input type="file" accept=".csv" onChange={handleCsvUpload} style={{display:'none'}}/></label>
+            <label style={{...bp,display:'inline-block',cursor:'pointer'}}>ارفع ملف CSV<input type="file" accept=".csv" onChange={handleCsvUpload} style={{display:'none'}}/></label>
             {csvStrings.length>0&&<>
               <button onClick={exportCsvResults} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'8px 16px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'13px',fontFamily:'inherit'}}> تصدير النتائج</button>
               <button onClick={resetCsv} style={{background:'#fef2f2',border:'2px solid #fecaca',borderRadius:'10px',padding:'8px 16px',color:'#dc2626',fontWeight:'600',cursor:'pointer',fontSize:'13px',fontFamily:'inherit'}}> مسح والبدء من جديد</button>
@@ -779,37 +804,58 @@ function App(){
             <p style={{fontSize:'11px',color:'#94a3b8',margin:'8px 0 0'}}>ملاحظة: يتطلب تشغيل الأداة عبر بروكسي يدعم CORS مع api.transifex.com</p>
           </div>
           {txStrings.length>0&&(
-            <div className="mobile-grid-1" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'14px'}}>
-              <div style={{...cs,padding:'20px'}}>
-                <div style={{marginBottom:'12px'}}>
+            <div className="mobile-grid-1" style={{display:'grid',gridTemplateColumns:'320px 1fr',gap:'14px',alignItems:'start'}}>
+              {/* القائمة الجانبية */}
+              <div className="tx-sidebar" style={{...cs,padding:'12px',maxHeight:'650px',display:'flex',flexDirection:'column'}}>
+                <div style={{marginBottom:'10px',paddingBottom:'10px',borderBottom:'2px solid #f1f5f9'}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#64748b',marginBottom:'6px'}}>
-                    <span>السلسلة {txIndex+1} من {txStrings.length}</span>
-                    <span>{txStrings.filter(s=>s.done).length}  | {txStrings.filter(s=>!s.done).length} متبقية</span>
+                    <span>{txStrings.filter(s=>s.done).length} مكتملة</span>
+                    <span>{txStrings.length} الإجمالي</span>
                   </div>
-                  <div style={{background:'#e2e8f0',borderRadius:'99px',height:'8px'}}>
-                    <div style={{height:'8px',borderRadius:'99px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',width:`${(txStrings.filter(s=>s.done).length/txStrings.length)*100}%`,transition:'width 0.5s'}}/>
+                  <div style={{background:'#e2e8f0',borderRadius:'99px',height:'6px'}}>
+                    <div style={{height:'6px',borderRadius:'99px',background:'linear-gradient(135deg,#4f46e5,#7c3aed)',width:`${(txStrings.filter(s=>s.done).length/txStrings.length)*100}%`,transition:'width 0.5s'}}/>
                   </div>
                 </div>
-                <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 4px',fontSize:'13px'}}>النص الإنجليزي {txStrings[txIndex]?.done&&<span style={{background:'#dcfce7',color:'#16a34a',borderRadius:'99px',padding:'2px 8px',fontSize:'11px'}}></span>}</p>
-                <p style={{fontSize:'10px',color:'#94a3b8',margin:'0 0 6px',direction:'ltr',textAlign:'left'}}>{txStrings[txIndex]?.id}</p>
-                <div className="ltr-content" style={{border:'2px solid #f1f5f9',background:'#f8fafc',borderRadius:'12px',padding:'12px',minHeight:'80px',fontSize:'13px',color:'#1e293b'}}>{txStrings[txIndex]?.en}</div>
-                <div style={{display:'flex',gap:'8px',marginTop:'10px'}}>
-                  <button onClick={()=>{if(txIndex>0){setTxIndex(txIndex-1);setTxTranslation(txStrings[txIndex-1]?.ar||"");}}} disabled={txIndex===0} style={{flex:1,background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'9px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:txIndex===0?0.4:1}}></button>
-                  <button onClick={txTranslateString} disabled={txLoading} style={{...bp,flex:2,opacity:txLoading?0.5:1}}>{txLoading?'':' ترجم'}</button>
-                  <button onClick={()=>{if(txIndex<txStrings.length-1){setTxIndex(txIndex+1);setTxTranslation(txStrings[txIndex+1]?.ar||"");}}} disabled={txIndex===txStrings.length-1} style={{flex:1,background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'9px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:txIndex===txStrings.length-1?0.4:1}}></button>
+                <div style={{overflowY:'auto',display:'flex',flexDirection:'column',gap:'4px'}}>
+                  {txStrings.map((s,i)=>(
+                    <button key={i} onClick={()=>{setTxIndex(i);setTxTranslation(s.ar||"");}} style={{
+                      textAlign:'right',padding:'8px 10px',borderRadius:'10px',border:'2px solid',cursor:'pointer',fontFamily:'inherit',
+                      background:i===txIndex?'#eef2ff':'transparent',
+                      borderColor:i===txIndex?'#4f46e5':'transparent',
+                      display:'flex',alignItems:'flex-start',gap:'6px'
+                    }}>
+                      <span style={{fontSize:'11px',color:s.done?'#16a34a':'#cbd5e1',fontWeight:'bold',minWidth:'14px'}}>{s.done?'✓':i+1}</span>
+                      <span className="ltr-content" style={{fontSize:'11px',color:'#475569',textAlign:'left',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{s.en}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
-              <div style={{...cs,padding:'20px'}}>
-                <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 8px',fontSize:'13px'}}>الترجمة العربية</p>
-                <div style={{border:'2px solid #f1f5f9',background:'#f8fafc',borderRadius:'12px',padding:'12px',minHeight:'100px'}}>
-                  {txLoading?<span style={{color:'#94a3b8',fontSize:'13px'}}> جاري التوليد...</span>
+
+              {/* خانة الترجمة الرئيسية */}
+              <div style={{...cs,padding:'24px'}}>
+                <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 4px',fontSize:'13px'}}>السلسلة {txIndex+1} من {txStrings.length} {txStrings[txIndex]?.done&&<span style={{background:'#dcfce7',color:'#16a34a',borderRadius:'99px',padding:'2px 8px',fontSize:'11px',marginRight:'6px'}}>مكتملة</span>}</p>
+                <p style={{fontSize:'10px',color:'#94a3b8',margin:'0 0 10px',direction:'ltr',textAlign:'left'}}>{txStrings[txIndex]?.id}</p>
+
+                <p style={{fontSize:'12px',color:'#64748b',margin:'0 0 6px'}}>النص الإنجليزي</p>
+                <div className="ltr-content" style={{border:'2px solid #f1f5f9',background:'#f8fafc',borderRadius:'12px',padding:'14px',minHeight:'70px',fontSize:'15px',color:'#1e293b',marginBottom:'16px'}}>{txStrings[txIndex]?.en}</div>
+
+                <p style={{fontSize:'12px',color:'#64748b',margin:'0 0 6px'}}>الترجمة العربية</p>
+                <div style={{border:'2px solid #f1f5f9',background:'#f8fafc',borderRadius:'12px',padding:'14px',minHeight:'100px'}}>
+                  {txLoading?<span style={{color:'#94a3b8',fontSize:'13px'}}>جاري التوليد...</span>
                    :<textarea className="rtl-content" dir="rtl" style={{width:'100%',background:'transparent',border:'none',outline:'none',resize:'none',minHeight:'80px',fontSize:'17px',color:'#1e293b'}}
                       value={txTranslation} onChange={e=>setTxTranslation(e.target.value)}
                       placeholder="ستظهر الترجمة هنا — يمكنك تعديلها قبل الرفع"/>}
                 </div>
+
+                <div style={{display:'flex',gap:'8px',marginTop:'16px',flexWrap:'wrap'}}>
+                  <button onClick={()=>{if(txIndex>0){setTxIndex(txIndex-1);setTxTranslation(txStrings[txIndex-1]?.ar||"");}}} disabled={txIndex===0} style={{background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'10px 16px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:txIndex===0?0.4:1}}>السابق</button>
+                  <button onClick={txTranslateString} disabled={txLoading} style={{...bp,flex:1,opacity:txLoading?0.5:1}}>{txLoading?'...':'ترجم'}</button>
+                  <button onClick={()=>{if(txIndex<txStrings.length-1){setTxIndex(txIndex+1);setTxTranslation(txStrings[txIndex+1]?.ar||"");}}} disabled={txIndex===txStrings.length-1} style={{background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'10px 16px',fontWeight:'700',cursor:'pointer',color:'#374151',fontFamily:'inherit',opacity:txIndex===txStrings.length-1?0.4:1}}>التالي</button>
+                </div>
+
                 {txTranslation&&!txLoading&&(
                   <button onClick={txPushTranslation} style={{...bp,width:'100%',marginTop:'10px',background:'#0369a1',border:'2px solid #0369a1',fontSize:'13px',borderRadius:'12px'}}>
-                     ارفع إلى Transifex
+                    ارفع إلى Transifex
                   </button>
                 )}
               </div>
@@ -865,18 +911,20 @@ function App(){
               <label style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px'}}> استيراد ملف<input type="file" accept=".json" onChange={importExamplesFile} style={{display:'none'}}/></label>
             </div>
             {debugInfo&&<p style={{fontSize:'11px',color:'#94a3b8',background:'#f8fafc',borderRadius:'8px',padding:'6px 10px',fontFamily:'monospace',marginBottom:'10px'}}>{debugInfo}</p>}
+            <input type="text" value={exSearch} onChange={e=>setExSearch(e.target.value)} placeholder="ابحث في الأمثلة (إنجليزي أو عربي)..." style={{width:'100%',padding:'10px 14px',borderRadius:'12px',border:'2px solid #e2e8f0',fontSize:'13px',marginBottom:'12px',boxSizing:'border-box'}}/>
+            {exSearch.trim()&&<p style={{fontSize:'11px',color:'#64748b',marginBottom:'8px'}}>{examples.filter(ex=>ex.en.toLowerCase().includes(exSearch.toLowerCase())||ex.ar.includes(exSearch)).length} نتيجة من {examples.length}</p>}
             {examples.length===0?<p style={{fontSize:'13px',color:'#94a3b8'}}>لا توجد أمثلة. الترجمات التي تعتمدها كـ "صحيحة 100%" تُضاف هنا تلقائيًا.</p>
-             :<div style={{maxHeight:'500px',overflowY:'auto',display:'flex',flexDirection:'column',gap:'8px'}}>
-                {examples.map((ex,idx)=>(
+             :<div className="ex-list" style={{maxHeight:'500px',overflowY:'auto',display:'flex',flexDirection:'column',gap:'8px'}}>
+                {examples.filter(ex=>!exSearch.trim()||ex.en.toLowerCase().includes(exSearch.toLowerCase())||ex.ar.includes(exSearch)).map((ex)=>{const idx=examples.indexOf(ex);return(
                   <div key={idx} style={{border:'2px solid #f1f5f9',borderRadius:'14px',padding:'10px',background:'rgba(255,255,255,0.7)',display:'flex',gap:'10px',alignItems:'flex-start'}}>
                     <div style={{flex:1,display:'flex',flexDirection:'column',gap:'5px'}}>
-                      {ex.ts&&<span style={{fontSize:'10px',color:'#94a3b8',direction:'ltr',textAlign:'left'}}>{new Date(ex.ts).toLocaleDateString('ar-IQ',{year:'numeric',month:'short',day:'numeric'})}</span>}
+                      <span style={{fontSize:'10px',color:'#94a3b8',direction:'ltr',textAlign:'left'}}>{ex.ts?new Date(ex.ts).toLocaleDateString('ar-IQ',{year:'numeric',month:'short',day:'numeric'}):'تاريخ غير محدد (مثال أساسي)'}</span>
                       <textarea className="ltr-content" style={{width:'100%',border:'1px solid #e2e8f0',borderRadius:'8px',padding:'6px',fontSize:'12px',color:'#374151',background:'#f8fafc',resize:'none',boxSizing:'border-box'}} value={ex.en} onChange={e=>updateExample(idx,'en',e.target.value)} rows={Math.min(3,Math.max(1,Math.ceil((ex.en||"").length/65)))}/>
                       <textarea className="rtl-content" dir="rtl" style={{width:'100%',border:'1px solid #e0e7ff',borderRadius:'8px',padding:'6px',fontSize:'14px',color:'#1e293b',background:'#f5f3ff',fontWeight:'500',resize:'none',boxSizing:'border-box'}} value={ex.ar} onChange={e=>updateExample(idx,'ar',e.target.value)} rows={Math.min(3,Math.max(1,Math.ceil((ex.ar||"").length/65)))}/>
                     </div>
                     <button onClick={()=>removeExample(idx)} style={{background:'none',border:'none',cursor:'pointer',color:'#f87171',fontSize:'16px',padding:'4px'}}></button>
                   </div>
-                ))}
+                );})}
               </div>}
           </div>
         </div>
