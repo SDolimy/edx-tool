@@ -15,25 +15,47 @@
   textarea{resize:vertical;font-family:inherit;font-size:16px!important;}
   input{font-size:16px!important;}
   .scrollbar-thin::-webkit-scrollbar{width:6px;} .scrollbar-thin::-webkit-scrollbar-thumb{background:#c7d2fe;border-radius:3px;}
-  @media(max-width:640px){
+
+  /* تجاوب Transifex - القائمة الجانبية فوق الترجمة على الجوال */
+  .tx-layout{display:grid;grid-template-columns:320px 1fr;gap:14px;align-items:start;}
+  .tx-sidebar{max-height:650px;}
+
+  @media(max-width:768px){
     body{padding:8px;}
-    .mobile-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap!important;padding-bottom:4px;}
+    h1{font-size:17px!important;}
+
+    /* التبويبات */
+    .mobile-tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap!important;padding-bottom:4px;scrollbar-width:none;}
+    .mobile-tabs::-webkit-scrollbar{display:none;}
     .mobile-tabs button{white-space:nowrap;flex-shrink:0;padding:8px 10px!important;font-size:11px!important;}
+
+    /* الشبكات */
     .mobile-grid-1{grid-template-columns:1fr!important;}
-    .mobile-p{padding:14px!important;}
+
+    /* Transifex: القائمة فوق ثم الترجمة */
+    .tx-layout{grid-template-columns:1fr!important;}
+    .tx-sidebar{max-height:200px!important;order:1;}
+    .tx-main{order:2;}
+
+    /* أزرار */
     .mobile-btn{padding:12px!important;font-size:14px!important;width:100%!important;}
-    h1{font-size:16px!important;}
-    .tx-sidebar{max-height:220px!important;}
-    .ex-list{max-height:350px!important;}
-    .header-row{flex-direction:column!important;align-items:flex-start!important;}
-    .header-status{align-self:flex-start;margin-top:8px;}
     .btn-row{flex-direction:column!important;}
     .btn-row>button,.btn-row>label{width:100%!important;}
-    .nav-row{flex-wrap:wrap!important;}
-    .nav-row>button{min-width:80px;}
+
+    /* هيدر */
+    .header-row{flex-direction:column!important;align-items:flex-start!important;}
+
+    /* أمثلة */
+    .ex-list{max-height:350px!important;}
+
+    /* API Key */
+    .api-box{flex-direction:column!important;}
+    .api-box>div{border-left:none!important;border-bottom:2px solid #f1f5f9;}
   }
+
   @media(max-width:400px){
     .mobile-tabs button{padding:7px 8px!important;font-size:10px!important;}
+    h1{font-size:15px!important;}
   }
 </style>
 </head>
@@ -518,7 +540,7 @@ function App(){
   // Transifex
   async function txFetchStrings(){
     if(!txToken.trim()||!txProjectSlug.trim()||!txResourceSlug.trim()){setTxError("يرجى إدخال التوكن والمشروع والمورد أولاً");return;}
-    setTxLoading(true);setTxError("");setTxStatus("جارٍ جلب السلاسل النصية...");
+    setTxLoading(true);setTxError("");setTxStatus("جارٍ اجلب السلاسل النصية...");
     try{
       const parts=txProjectSlug.split(':');
       const org=parts[0];const proj=parts[1]||parts[0];
@@ -551,16 +573,16 @@ function App(){
       const res=await fetch(`https://rest.api.transifex.com/resource_translations/${encodeURIComponent(translationId)}?include=translator`,{headers:{'Authorization':`Bearer ${txToken}`,'Content-Type':'application/vnd.api+json'}});
       if(!res.ok){setTxMetaLoading(false);return;}
       const data=await res.json();
+      console.log('TX Meta response:', JSON.stringify(data.data?.attributes), JSON.stringify(data.data?.relationships?.translator));
       const dt=data.data?.attributes?.datetime_translated;
       const translatorRel=data.data?.relationships?.translator?.data;
       let translatorName=translatorRel?.id?.replace('u:','')||null;
-      // محاولة الحصول على اسم العرض من included
       if(data.included){
         const u=data.included.find(i=>i.type==='users'&&i.id===translatorRel?.id);
         if(u?.attributes?.username)translatorName=u.attributes.username;
       }
       setTxMeta({translator:translatorName,datetime:dt});
-    }catch{setTxMeta(null);}finally{setTxMetaLoading(false);}
+    }catch(e){console.error('TX Meta error:',e);setTxMeta(null);}finally{setTxMetaLoading(false);}
   }
 
   useEffect(()=>{
@@ -585,7 +607,7 @@ function App(){
       // معرّف السلسلة بصيغة: o:org:p:project:r:resource:s:HASH
       // معرّف الترجمة بصيغة: o:org:p:project:r:resource:s:HASH:l:ar
       const translationId=`${cur.id}:l:ar`;
-      const payload={data:{type:"resource_translations",id:translationId,attributes:{strings:{other:txTranslation}}}};
+      const payload={data:{type:"resource_translations",id:translationId,attributes:{strings:{other:txTranslation},reviewed:true}}};
       const res=await fetch(`https://rest.api.transifex.com/resource_translations/${encodeURIComponent(translationId)}`,{method:"PATCH",headers:{'Authorization':`Bearer ${txToken}`,'Content-Type':'application/vnd.api+json'},body:JSON.stringify(payload)});
       if(!res.ok){const err=await res.json();throw new Error(err.errors?.[0]?.detail||`HTTP ${res.status}`);}
       const updated=txStrings.map((s,i)=>i===txIndex?{...s,ar:txTranslation,done:true}:s);
@@ -636,12 +658,12 @@ function App(){
   const bp={background:'linear-gradient(135deg,#4f46e5,#6366f1)',color:'white',border:'none',borderRadius:'12px',padding:'10px 20px',fontWeight:'bold',cursor:'pointer',fontSize:'14px',fontFamily:'inherit'};
 
   const tabs=[
-    {key:'translate',label:' الترجمة',count:null},
-    {key:'csv',label:' CSV',count:csvStrings.length>0?`${csvStrings.filter(s=>s.done).length}/${csvStrings.length}`:null},
-    {key:'transifex',label:' Transifex',count:txStrings.length>0?`${txStrings.filter(s=>s.done).length}/${txStrings.length}`:null},
+    {key:'translate',label:'ترجِم الآن',count:null},
+    {key:'csv',label:'ترجِم ملف CSV',count:csvStrings.length>0?`${csvStrings.filter(s=>s.done).length}/${csvStrings.length}`:null},
+    {key:'transifex',label:'ترجِم في Transifex',count:txStrings.length>0?`${txStrings.filter(s=>s.done).length}/${txStrings.length}`:null},
     {key:'guideline',label:' الدليل',count:null},
     {key:'examples',label:' الأمثلة',count:examples.length},
-    {key:'history',label:' السجل',count:history.length},
+    {key:'history',label:'سِجل الترجمة',count:history.length},
   ];
 
   return(
@@ -654,8 +676,8 @@ function App(){
       </div>
 
       {/* API Key + Cloud Status */}
-      <div style={{...cs,padding:0,marginBottom:'14px',display:'flex',overflow:'hidden'}} className="mobile-grid-1">
-        <div style={{flex:1,padding:'14px',borderLeft:'2px solid #f1f5f9',display:'flex',alignItems:'center'}}>
+      <div style={{...cs,padding:0,marginBottom:'14px',display:'flex',overflow:'hidden',alignItems:'stretch'}} className="api-box">
+        <div style={{flex:1,padding:'14px',display:'flex',alignItems:'center',justifyContent:'center',borderLeft:'2px solid #f1f5f9'}}>
           <div style={{display:'flex',alignItems:'center',gap:'6px',
             background:cloudStatus==='connected'?'#f0fdf4':cloudStatus==='error'?'#fef2f2':'#f8fafc',
             border:`2px solid ${cloudStatus==='connected'?'#bbf7d0':cloudStatus==='error'?'#fecaca':'#e2e8f0'}`,
@@ -772,7 +794,7 @@ function App(){
           <div style={{...cs,padding:'18px',display:'flex',flexWrap:'wrap',gap:'10px',alignItems:'center'}}>
             <label style={{...bp,display:'inline-block',cursor:'pointer'}}>ارفع ملف CSV<input type="file" accept=".csv" onChange={handleCsvUpload} style={{display:'none'}}/></label>
             {csvStrings.length>0&&<>
-              <button onClick={exportCsvResults} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'8px 16px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'13px',fontFamily:'inherit'}}> تصدير النتائج</button>
+              <button onClick={exportCsvResults} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'8px 16px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'13px',fontFamily:'inherit'}}> صدِّر النتائج</button>
               <button onClick={resetCsv} style={{background:'#fef2f2',border:'2px solid #fecaca',borderRadius:'10px',padding:'8px 16px',color:'#dc2626',fontWeight:'600',cursor:'pointer',fontSize:'13px',fontFamily:'inherit'}}> مسح والبدء من جديد</button>
             </>}
             {csvError&&<p style={{color:'#ef4444',fontSize:'13px',width:'100%',margin:0}}>{csvError}</p>}
@@ -838,16 +860,16 @@ function App(){
               </div>
             </div>
             <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
-              <button onClick={txFetchStrings} disabled={txLoading} style={{...bp,opacity:txLoading?0.5:1}}>{txLoading?' جارٍ...':' جلب السلاسل النصية'}</button>
+              <button onClick={txFetchStrings} disabled={txLoading} style={{...bp,opacity:txLoading?0.5:1}}>{txLoading?' جارٍ...':' اجلب السلاسل النصية'}</button>
               {txStatus&&<span style={{fontSize:'13px',color:'#16a34a',fontWeight:'600'}}>{txStatus}</span>}
             </div>
             {txError&&<p style={{color:'#ef4444',fontSize:'12px',background:'#fef2f2',borderRadius:'10px',padding:'10px',marginTop:'8px'}}>{txError}</p>}
             <p style={{fontSize:'11px',color:'#94a3b8',margin:'8px 0 0'}}>ملاحظة: يتطلب تشغيل الأداة عبر بروكسي يدعم CORS مع api.transifex.com</p>
           </div>
           {txStrings.length>0&&(
-            <div className="mobile-grid-1" style={{display:'grid',gridTemplateColumns:'320px 1fr',gap:'14px',alignItems:'start'}}>
+            <div className="tx-layout">
               {/* القائمة الجانبية */}
-              <div className="tx-sidebar" style={{...cs,padding:'12px',maxHeight:'650px',display:'flex',flexDirection:'column'}}>
+              <div className="tx-sidebar" style={{...cs,padding:'12px',display:'flex',flexDirection:'column'}}>
                 <div style={{marginBottom:'10px',paddingBottom:'10px',borderBottom:'2px solid #f1f5f9'}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:'12px',color:'#64748b',marginBottom:'6px'}}>
                     <span>{txStrings.filter(s=>s.done).length} مكتملة</span>
@@ -875,7 +897,7 @@ function App(){
               </div>
 
               {/* خانة الترجمة الرئيسية */}
-              <div style={{...cs,padding:'24px'}}>
+              <div className="tx-main" style={{...cs,padding:'24px'}}>
                 <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 4px',fontSize:'13px'}}>السلسلة {txIndex+1} من {txStrings.length} {txStrings[txIndex]?.done&&<span style={{background:'#dcfce7',color:'#16a34a',borderRadius:'99px',padding:'2px 8px',fontSize:'11px',marginRight:'6px'}}>مكتملة</span>}</p>
                 <p style={{fontSize:'10px',color:'#94a3b8',margin:'0 0 6px',direction:'ltr',textAlign:'left'}}>{txStrings[txIndex]?.id}</p>
                 {txMetaLoading
@@ -931,7 +953,7 @@ function App(){
               }} style={{...bp,fontSize:'12px',padding:'7px 14px',background:saveStatus==='success'?'#15803d':'#16a34a',border:'none'}}>
                 {saveStatus==='success'?'تم الحفظ':saveStatus==='error'?'خطأ':'احفظ'}
               </button>
-              <button onClick={()=>setGuideline(DEFAULT_GUIDELINE)} style={{background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'7px 14px',fontWeight:'600',cursor:'pointer',color:'#374151',fontSize:'12px',fontFamily:'inherit'}}>↺ إعادة الافتراضي</button>
+              <button onClick={()=>{if(window.confirm('هل أنت متأكد من إعادة الدليل إلى نسخته الافتراضية؟ سيُفقد كل ما عدّلته.')){setGuideline(DEFAULT_GUIDELINE);}}} style={{background:'#fef2f2',border:'2px solid #fecaca',borderRadius:'10px',padding:'7px 14px',fontWeight:'600',cursor:'pointer',color:'#dc2626',fontSize:'12px',fontFamily:'inherit'}}>↺ أعِد النسخة الافتراضية</button>
             </div>
           </div>
           <textarea className="rtl-content" dir="rtl" style={{width:'100%',border:'2px solid #e2e8f0',borderRadius:'14px',padding:'16px',minHeight:'500px',fontSize:'12px',lineHeight:'1.8',fontFamily:'monospace',boxSizing:'border-box'}} value={guideline} onChange={e=>setGuideline(e.target.value)}/>
@@ -942,12 +964,12 @@ function App(){
       {tab==='examples'&&(
         <div style={{...cs,padding:'20px'}}>
           <div style={{marginBottom:'14px'}}>
-            <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 8px',fontSize:'13px'}}>إضافة مثال جديد</p>
+            <p style={{fontWeight:'bold',color:'#374151',margin:'0 0 8px',fontSize:'13px'}}>أضِف مثالاً جديداً</p>
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:'10px'}}>
               <textarea className="ltr-content" style={{border:'2px solid #e2e8f0',borderRadius:'10px',padding:'8px',fontSize:'13px',minHeight:'60px',boxSizing:'border-box'}} placeholder="English text" value={newExEn} onChange={e=>setNewExEn(e.target.value)}/>
               <textarea className="rtl-content" dir="rtl" style={{border:'2px solid #e2e8f0',borderRadius:'10px',padding:'8px',fontSize:'14px',minHeight:'60px',boxSizing:'border-box'}} placeholder="الترجمة العربية" value={newExAr} onChange={e=>setNewExAr(e.target.value)}/>
             </div>
-            <button onClick={addExample} disabled={!newExEn.trim()||!newExAr.trim()} style={{...bp,marginTop:'8px',fontSize:'13px',padding:'8px 18px',opacity:(!newExEn.trim()||!newExAr.trim())?0.4:1}}> إضافة المثال</button>
+            <button onClick={addExample} disabled={!newExEn.trim()||!newExAr.trim()} style={{...bp,marginTop:'8px',fontSize:'13px',padding:'8px 18px',opacity:(!newExEn.trim()||!newExAr.trim())?0.4:1}}> أضِف مثالاً جديداً</button>
           </div>
 
           <div style={{borderTop:'2px solid #f1f5f9',paddingTop:'14px'}}>
@@ -959,8 +981,8 @@ function App(){
                 {saveStatus==='saving'?' جاري...':saveStatus==='success'?' تم الحفظ!':saveStatus==='error'?' خطأ':' احفظ'}
               </button>
               <button onClick={restoreDefaultExamples} style={{background:'#f1f5f9',border:'2px solid #e2e8f0',borderRadius:'10px',padding:'7px 14px',fontWeight:'600',cursor:'pointer',color:'#374151',fontSize:'12px',fontFamily:'inherit'}}>↺ استعادة الافتراضية</button>
-              <button onClick={exportExamples} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px',fontFamily:'inherit'}}> تصدير نسخة احتياطية</button>
-              <label style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px'}}> استيراد ملف<input type="file" accept=".json" onChange={importExamplesFile} style={{display:'none'}}/></label>
+              <button onClick={exportExamples} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px',fontFamily:'inherit'}}> صدِّر نسخة احتياطية</button>
+              <label style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px'}}>استورِد ملف<input type="file" accept=".json" onChange={importExamplesFile} style={{display:'none'}}/></label>
             </div>
             {debugInfo&&<p style={{fontSize:'11px',color:'#94a3b8',background:'#f8fafc',borderRadius:'8px',padding:'6px 10px',fontFamily:'monospace',marginBottom:'10px'}}>{debugInfo}</p>}
             <input type="text" value={exSearch} onChange={e=>setExSearch(e.target.value)} placeholder="ابحث في الأمثلة (إنجليزي أو عربي)..." style={{width:'100%',padding:'10px 14px',borderRadius:'12px',border:'2px solid #e2e8f0',fontSize:'13px',marginBottom:'12px',boxSizing:'border-box'}}/>
@@ -987,7 +1009,7 @@ function App(){
         <div style={{...cs,padding:'20px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'10px'}}>
             <p style={{fontWeight:'bold',color:'#374151',margin:0,fontSize:'13px'}}> سجل الترجمات ({history.length})</p>
-            {history.length>0&&<button onClick={()=>{const blob=new Blob([JSON.stringify(history,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`history-${history.length}.json`;a.click();}} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px',fontFamily:'inherit'}}> تصدير السجل</button>}
+            {history.length>0&&<button onClick={()=>{const blob=new Blob([JSON.stringify(history,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`history-${history.length}.json`;a.click();}} style={{background:'#eff6ff',border:'2px solid #bfdbfe',borderRadius:'10px',padding:'7px 14px',color:'#1d4ed8',fontWeight:'600',cursor:'pointer',fontSize:'12px',fontFamily:'inherit'}}> صدِّر السجل</button>}
           </div>
           {history.length===0?<p style={{fontSize:'13px',color:'#94a3b8'}}>لا توجد ترجمات مسجلة بعد.</p>
            :<div style={{maxHeight:'600px',overflowY:'auto',display:'flex',flexDirection:'column',gap:'8px'}}>
@@ -1000,8 +1022,8 @@ function App(){
                     </span>
                     <div style={{display:'flex',gap:'10px',alignItems:'center'}}>
                       {item.ts&&<span style={{fontSize:'10px',color:'#94a3b8'}}>{new Date(item.ts).toLocaleDateString('ar-IQ')}</span>}
-                      <button onClick={()=>reuseFromHistory(item)} style={{background:'none',border:'none',color:'#4f46e5',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'}}>إعادة فتح</button>
-                      <button onClick={()=>removeHistory(idx)} style={{background:'none',border:'none',color:'#f87171',fontSize:'12px',cursor:'pointer',fontFamily:'inherit'}}>حذف</button>
+                      <button onClick={()=>reuseFromHistory(item)} style={{background:'none',border:'none',color:'#4f46e5',fontSize:'12px',fontWeight:'600',cursor:'pointer',fontFamily:'inherit'}}>أعِد فتح</button>
+                      <button onClick={()=>removeHistory(idx)} style={{background:'none',border:'none',color:'#f87171',fontSize:'12px',cursor:'pointer',fontFamily:'inherit'}}>احذف</button>
                     </div>
                   </div>
                   <p className="ltr-content" style={{fontSize:'12px',color:'#64748b',margin:'0 0 4px'}}>{item.en}</p>
